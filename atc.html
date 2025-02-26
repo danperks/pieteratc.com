@@ -1,0 +1,1867 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Levelsio ATC Visualizer</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Courier New', monospace;
+            background-color: #0a0a0a;
+            color: #00ff00;
+            overflow: hidden;
+        }
+        
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #title-bar {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            padding: 8px 12px;
+            background-color: rgba(0, 0, 0, 0.8);
+            border: 1px solid #00ff00;
+            font-size: 16px;
+            font-weight: bold;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+        }
+        
+        #launch-button {
+            margin-left: 15px;
+            background-color: #003300;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+            padding: 5px 10px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+        
+        #launch-button:hover {
+            background-color: #004400;
+        }
+        
+        #credits {
+            position: absolute;
+            top: 80px;
+            left: 20px;
+            padding: 8px 12px;
+            background-color: rgba(0, 0, 0, 0.8);
+            border: 1px solid #00ff00;
+            font-size: 14px;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+        }
+        
+        #cursor-logo {
+            height: 20px;
+            margin-left: 10px;
+        }
+        
+        .clickable-text {
+            position: relative;
+            cursor: pointer;
+            color: #00ff00;
+            text-decoration: none;
+            padding-bottom: 2px;
+            margin: 0 3px;
+            display: inline-block;
+            padding-right: 15px;
+            margin-left: 10px;
+        }
+        
+        .clickable-text::after {
+            content: "";
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: calc(100% - 15px);
+            border-bottom: 1px solid #00ff0078;
+        }
+        
+        .clickable-text::before {
+            content: "↗";
+            position: absolute;
+            bottom: 1px;
+            right: 3px;
+            font-size: 17px;
+            opacity: 0.8;
+        }
+        
+        .clickable-text:hover {
+            color: #ffff00;
+        }
+        
+        .clickable-text:hover::after {
+            border-bottom-color: #ffff00;
+        }
+        
+        .clickable-text:hover::before {
+            color: #ffff00;
+        }
+        
+        #connection-status {
+            position: absolute;
+            top: 120px;
+            left: 12px;
+            padding: 8px 12px;
+            font-size: 14px;
+            z-index: 100;
+            display: none; /* Hide the standalone connection status */
+        }
+        
+        #radar {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80vmin;
+            height: 80vmin;
+            border-radius: 50%;
+            background-color: #001100;
+            border: 2px solid #00ff00;
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);
+            overflow: hidden;
+        }
+        
+        .radar-sweep {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            width: 50%;
+            height: 100%;
+            background: linear-gradient(90deg, rgba(0,255,0,0) 0%, rgba(0,255,0,0.2) 100%);
+            transform-origin: left center;
+            animation: sweep 5s infinite linear;
+        }
+        
+        @keyframes sweep {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        
+        .radar-circle {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            border: 1px solid rgba(0, 255, 0, 0.3);
+            border-radius: 50%;
+        }
+        
+        .radar-center {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 6px;
+            height: 6px;
+            background-color: #00ff00;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+        
+        .plane {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            transform: translate(-50%, -50%);
+            cursor: pointer;
+            transition: transform 0.5s ease-out, opacity 0.5s ease-out;
+            z-index: 10;
+        }
+        
+        .plane-icon {
+            width: 100%;
+            height: 100%;
+            fill: #00ff00;
+            transform-origin: center;
+            filter: drop-shadow(0 0 2px rgba(0, 255, 0, 0.7));
+        }
+        
+        /* Altitude-based colors */
+        .altitude-low .plane-icon {
+            fill: #00ff00; /* Green for low altitude */
+        }
+        
+        .altitude-medium .plane-icon {
+            fill: #ffff00; /* Yellow for medium altitude */
+        }
+        
+        .altitude-high .plane-icon {
+            fill: #ff00ff; /* Magenta for high altitude */
+        }
+        
+        .altitude-very-high .plane-icon {
+            fill: #00ffff; /* Cyan for very high altitude */
+        }
+        
+        .plane-label {
+            position: absolute;
+            top: -20px;
+            left: 10px;
+            font-size: 12px;
+            white-space: nowrap;
+            color: #00ff00;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 2px 4px;
+            border-radius: 2px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        
+        .plane:hover .plane-label {
+            opacity: 1;
+        }
+        
+        .plane-trail {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            background-color: rgba(0, 255, 0, 0.5);
+            border-radius: 50%;
+        }
+        
+        #info-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 300px;
+            background-color: rgba(0, 0, 0, 0.8);
+            border: 1px solid #00ff00;
+            padding: 15px;
+            font-size: 14px;
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+        }
+        
+        #selected-plane-info {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(0, 255, 0, 0.3);
+        }
+        
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+        }
+        
+        .info-label {
+            color: rgba(0, 255, 0, 0.7);
+        }
+        
+        .info-value {
+            font-weight: bold;
+        }
+        
+        #controls {
+            position: absolute;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            border: 1px solid #00ff00;
+            padding: 8px;
+            z-index: 90;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 4px;
+        }
+        
+        button {
+            background-color: #003300;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+            padding: 5px 10px;
+            margin: 0 3px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            border-radius: 3px;
+        }
+        
+        button:hover {
+            background-color: #004400;
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .control-button {
+            width: 30px;
+            height: 30px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            padding: 0;
+        }
+        
+        #scale-indicator {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.7);
+            border: 1px solid rgba(0, 255, 0, 0.3);
+            border-radius: 4px;
+            padding: 5px 10px;
+            font-size: 12px;
+            text-align: center;
+            color: rgba(0, 255, 0, 0.8);
+            z-index: 5;
+        }
+        
+        .coordinate-axis {
+            position: absolute;
+            background-color: rgba(0, 255, 0, 0.2);
+        }
+        
+        .x-axis {
+            top: 50%;
+            left: 0;
+            width: 100%;
+            height: 1px;
+            transform: translateY(-0.5px);
+        }
+        
+        .z-axis {
+            top: 0;
+            left: 50%;
+            width: 1px;
+            height: 100%;
+            transform: translateX(-0.5px);
+        }
+        
+        .coordinate-label {
+            position: absolute;
+            font-size: 10px;
+            color: rgba(0, 255, 0, 0.7);
+        }
+        
+        #altitude-legend {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background-color: rgba(0, 0, 0, 0.8);
+            border: 1px solid #00ff00;
+            padding: 10px;
+            font-size: 12px;
+            z-index: 100;
+            width: auto;
+            min-width: 150px;
+        }
+        
+        .legend-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            margin-right: 8px;
+        }
+        
+        .legend-color.altitude-low {
+            background-color: #00ff00;
+        }
+        
+        .legend-color.altitude-medium {
+            background-color: #ffff00;
+        }
+        
+        .legend-color.altitude-high {
+            background-color: #ff00ff;
+        }
+        
+        .legend-color.altitude-very-high {
+            background-color: #00ffff;
+        }
+        
+        .legend-label {
+            color: rgba(0, 255, 0, 0.7);
+        }
+        
+        #plane-list-container {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 250px;
+            background-color: rgba(0, 0, 0, 0.8);
+            border: 1px solid #00ff00;
+            padding: 10px;
+            font-size: 14px;
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+            display: none; /* Hidden by default, will be shown if screen is wide enough */
+            z-index: 90;
+            max-height: 60vh;
+            overflow: hidden;
+        }
+        
+        .plane-list-header {
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-align: center;
+            color: #00ff00;
+            border-bottom: 1px solid rgba(0, 255, 0, 0.3);
+            padding-bottom: 5px;
+        }
+        
+        #plane-list {
+            max-height: 55vh;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: #00ff00 #001100;
+        }
+        
+        #plane-list::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        #plane-list::-webkit-scrollbar-track {
+            background: #001100;
+        }
+        
+        #plane-list::-webkit-scrollbar-thumb {
+            background-color: #00ff00;
+            border-radius: 3px;
+        }
+        
+        .plane-list-item {
+            display: flex;
+            align-items: center;
+            padding: 3px 5px;
+            margin-bottom: 3px;
+            border: 1px solid rgba(0, 255, 0, 0.3);
+            border-radius: 3px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.3s;
+            position: relative;
+        }
+        
+        .plane-list-item:hover {
+            background-color: rgba(0, 255, 0, 0.1);
+        }
+        
+        .plane-list-item.selected {
+            border-color: #ffff00;
+            background-color: rgba(255, 255, 0, 0.1);
+        }
+        
+        .plane-list-item.new-plane {
+            animation: flash-green 1s;
+        }
+        
+        @keyframes flash-green {
+            0% { background-color: rgba(0, 255, 0, 0); }
+            50% { background-color: rgba(0, 255, 0, 0.3); }
+            100% { background-color: rgba(0, 255, 0, 0); }
+        }
+        
+        .plane-list-color {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+            flex-shrink: 0;
+        }
+        
+        .plane-list-info {
+            flex-grow: 1;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .plane-list-id {
+            font-weight: bold;
+        }
+        
+        .plane-list-time {
+            font-size: 12px;
+            color: rgba(0, 255, 0, 0.7);
+            margin-left: 8px;
+        }
+        
+        .centering-effect {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 2px solid #ffff00;
+            transform: translate(-50%, -50%);
+            animation: center-pulse 1s ease-out;
+            pointer-events: none;
+            z-index: 20;
+        }
+        
+        @keyframes center-pulse {
+            0% {
+                width: 40px;
+                height: 40px;
+                opacity: 1;
+                border-width: 2px;
+            }
+            100% {
+                width: 100px;
+                height: 100px;
+                opacity: 0;
+                border-width: 1px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="title-bar">
+            <span>PieterFly ATC Visualizer</span>
+            <button id="launch-button">Launch</button>
+        </div>
+        <div id="credits">
+            <span>Made in </span>
+            <video id="cursor-logo" autoplay loop muted playsinline>
+                <source src="https://www.cursor.com/assets/images/logo.mp4" type="video/mp4">
+            </video>
+            <span class="clickable-text" id="cursor-link">Cursor</span>
+            <span> by </span>
+            <span class="clickable-text" id="dan-perks-link">Dan Perks</span>
+        </div>
+        <div id="radar">
+            <div class="radar-sweep"></div>
+            <!-- Radar circles will be added dynamically -->
+            <div class="radar-center"></div>
+            <div class="coordinate-axis x-axis"></div>
+            <div class="coordinate-axis z-axis"></div>
+            <div id="scale-indicator">Scale: <span id="scale-value">1000</span> units</div>
+        </div>
+        
+        <div id="connection-status">Status: Connecting...</div>
+        
+        <div id="info-panel">
+            <div class="info-row">
+                <span class="info-label">Status:</span>
+                <span class="info-value" id="connection-status-value">Connecting...</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Active Planes:</span>
+                <span class="info-value" id="active-planes-count">0</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Last Update:</span>
+                <span class="info-value" id="last-update-time">--:--:--</span>
+            </div>
+            
+            <div id="selected-plane-info">
+                <div class="info-row">
+                    <span class="info-label">Selected:</span>
+                    <span class="info-value" id="selected-plane-id">None</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Position:</span>
+                    <span class="info-value" id="selected-plane-position">--</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Altitude:</span>
+                    <span class="info-value" id="selected-plane-altitude">--</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Heading:</span>
+                    <span class="info-value" id="selected-plane-heading">--</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Speed:</span>
+                    <span class="info-value" id="selected-plane-speed">--</span>
+                </div>
+            </div>
+        </div>
+        
+        <div id="plane-list-container">
+            <div class="plane-list-header">Active Planes (Oldest First)</div>
+            <div id="plane-list"></div>
+        </div>
+        
+        <div id="altitude-legend">
+            <div class="legend-title">Altitude</div>
+            <div class="legend-item">
+                <div class="legend-color altitude-low"></div>
+                <div class="legend-label">&lt; 3,300 ft <span style="font-size: 9px;">(planes &lt; 30ft hidden by default)</span></div>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color altitude-medium"></div>
+                <div class="legend-label">3,300 - 10,000 ft</div>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color altitude-high"></div>
+                <div class="legend-label">10,000 - 20,000 ft</div>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color altitude-very-high"></div>
+                <div class="legend-label">&gt; 20,000 ft</div>
+            </div>
+        </div>
+        
+        <div id="controls">
+            <button id="zoom-in" class="control-button">+</button>
+            <button id="zoom-out" class="control-button">-</button>
+            <button id="center-view">Center</button>
+            <button id="deselect-plane" disabled>Deselect</button>
+            <button id="toggle-trails">Trails</button>
+            <button id="toggle-landed">Show Landed</button>
+        </div>
+    </div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+    <script>
+        // Configuration
+        const WS_SERVER = 'wss://fly.pieter.com:8080';
+        const MAX_PLANES = 100;
+        const TRAIL_LENGTH = 20;
+        const TRAIL_INTERVAL = 2000; // ms between trail points
+        const S = '7sw3hs9rmrmcq113'; // Server secret (must match the server's secret)
+        const MAX_RECONNECT_ATTEMPTS = 3; // Maximum number of reconnection attempts
+        
+        let reconnectAttempts = 0;
+        
+        // Helper functions for WebSocket handshake
+        function generatePlaneId() {
+            // Generate a random string of letters and numbers
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+            let id = 'ATC_';
+            for (let i = 0; i < 6; i++) {
+                id += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return id;
+        }
+        
+        function generateSecretKey() {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+            let key = '';
+            for (let i = 0; i < 16; i++) {
+                key += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return key;
+        }
+        
+        function gv(data, secretKey) {
+            // Create a string from position data and timestamp
+            const posString = `${data.x},${data.y},${data.z},${data.timestamp},${S}`;
+            
+            // Use a simple additive hash that works consistently across platforms
+            let hash = 0;
+            for (let i = 0; i < posString.length; i++) {
+                // Add character code and multiply by a prime number
+                hash = ((hash * 31) + posString.charCodeAt(i)) % 1000000;
+            }
+            
+            // Convert to hex string with fixed length (6 characters)
+            return hash.toString(16).padStart(6, '0');
+        }
+        
+        // State variables
+        let socket = null;
+        let planes = new Map(); // Map of planeId -> plane data
+        let selectedPlaneId = null;
+        let scale = 1000; // Initial scale (radar radius in game units)
+        let showTrails = true;
+        let showLanded = false; // Default to hiding landed planes
+        let radarCenter = { x: 0, z: 0 }; // Center of the radar view in game coordinates
+        let lastUpdateTime = Date.now(); // Track last update time for auto-reconnect
+        let lastHeartbeatTime = 0; // Track last heartbeat time
+        let lastPlaneListUpdate = 0; // Track last plane list update time for debouncing
+        let ourPlaneId = null; // Our plane ID for heartbeat messages
+        let ourSecretKey = null; // Our secret key for heartbeat messages
+        const NO_UPDATE_RECONNECT_TIMEOUT = 5000; // Reconnect if no updates for 5 seconds
+        const PLANE_FADE_START = 5000; // Start fading plane after 5 seconds
+        const PLANE_FADE_DURATION = 5000; // Complete fade over 5 seconds
+        const HEARTBEAT_INTERVAL = 0.5; // Send heartbeat every 0.5 seconds (same as fly.html)
+        const LANDED_ALTITUDE_THRESHOLD = 30; // Planes below this altitude (in feet) are considered landed
+        const PLANE_LIST_UPDATE_INTERVAL = 1000; // Update plane list once per second
+        
+        // DOM elements
+        const radar = document.getElementById('radar');
+        const connectionStatus = document.getElementById('connection-status');
+        const connectionStatusValue = document.getElementById('connection-status-value');
+        const activePlanesCount = document.getElementById('active-planes-count');
+        const lastUpdateTimeElement = document.getElementById('last-update-time');
+        const selectedPlaneIdElement = document.getElementById('selected-plane-id');
+        const selectedPlanePosition = document.getElementById('selected-plane-position');
+        const selectedPlaneAltitude = document.getElementById('selected-plane-altitude');
+        const selectedPlaneHeading = document.getElementById('selected-plane-heading');
+        const selectedPlaneSpeed = document.getElementById('selected-plane-speed');
+        const scaleValue = document.getElementById('scale-value');
+        const planeListContainer = document.getElementById('plane-list-container');
+        const planeList = document.getElementById('plane-list');
+        
+        // Check if screen is wide enough to show the plane list
+        function checkScreenWidth() {
+            if (window.innerWidth > 1000) {
+                planeListContainer.style.display = 'block';
+            } else {
+                planeListContainer.style.display = 'none';
+            }
+        }
+        
+        // Call on load and on resize
+        window.addEventListener('resize', checkScreenWidth);
+        checkScreenWidth();
+        
+        // Create radar circles
+        function createRadarCircles() {
+            const circles = [0.25, 0.5, 0.75];
+            circles.forEach(ratio => {
+                const circle = document.createElement('div');
+                circle.className = 'radar-circle';
+                circle.style.width = `${ratio * 100}%`;
+                circle.style.height = `${ratio * 100}%`;
+                
+                // Add coordinate labels
+                const distance = Math.round(scale * ratio);
+                
+                // Top label
+                const topLabel = document.createElement('div');
+                topLabel.className = 'coordinate-label';
+                topLabel.textContent = `${distance}`;
+                topLabel.style.top = '5px';
+                topLabel.style.left = '50%';
+                topLabel.style.transform = 'translateX(-50%)';
+                
+                // Bottom label
+                const bottomLabel = document.createElement('div');
+                bottomLabel.className = 'coordinate-label';
+                bottomLabel.textContent = `-${distance}`;
+                bottomLabel.style.bottom = '5px';
+                bottomLabel.style.left = '50%';
+                bottomLabel.style.transform = 'translateX(-50%)';
+                
+                // Left label
+                const leftLabel = document.createElement('div');
+                leftLabel.className = 'coordinate-label';
+                leftLabel.textContent = `-${distance}`;
+                leftLabel.style.left = '5px';
+                leftLabel.style.top = '50%';
+                leftLabel.style.transform = 'translateY(-50%)';
+                
+                // Right label
+                const rightLabel = document.createElement('div');
+                rightLabel.className = 'coordinate-label';
+                rightLabel.textContent = `${distance}`;
+                rightLabel.style.right = '5px';
+                rightLabel.style.top = '50%';
+                rightLabel.style.transform = 'translateY(-50%)';
+                
+                radar.appendChild(circle);
+                radar.appendChild(topLabel);
+                radar.appendChild(bottomLabel);
+                radar.appendChild(leftLabel);
+                radar.appendChild(rightLabel);
+            });
+        }
+        
+        // Initialize radar circles
+        createRadarCircles();
+        
+        // Connect to WebSocket server
+        function connectWebSocket() {
+            try {
+                console.log('Connecting to WebSocket server...');
+                connectionStatus.textContent = 'Status: Connecting...';
+                connectionStatusValue.textContent = 'Connecting...';
+                connectionStatusValue.style.color = '#ffff00';
+                
+                socket = new WebSocket(WS_SERVER);
+                
+                socket.onopen = () => {
+                    console.log('Connected to WebSocket server');
+                    connectionStatus.textContent = 'Status: Connected';
+                    connectionStatusValue.textContent = 'Connected';
+                    connectionStatus.style.color = '#00ff00';
+                    connectionStatusValue.style.color = '#00ff00';
+                    
+                    // Send initial handshake message with a generated plane ID
+                    ourPlaneId = generatePlaneId();
+                    ourSecretKey = generateSecretKey();
+                    
+                    // Send a dummy position to initialize the connection
+                    const initialPosition = {
+                        x: 0,
+                        y: 36,
+                        z: 0,
+                        rotationX: 0,
+                        rotationY: 0,
+                        rotationZ: 0,
+                        speed: 0,
+                        heading: 0,
+                        verticalSpeed: 0,
+                        timestamp: Date.now()
+                    };
+                    
+                    // Generate validation hash
+                    const v = gv(initialPosition, ourSecretKey);
+                    
+                    const message = {
+                        type: 'position',
+                        planeId: ourPlaneId,
+                        data: initialPosition,
+                        v: v
+                    };
+                    
+                    console.log('Sending initial handshake:', message);
+                    socket.send(JSON.stringify(message));
+                    
+                    // Reset lastHeartbeatTime
+                    lastHeartbeatTime = Date.now();
+                };
+                
+                socket.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        
+                        if (data.type === 'position') {
+                            // Handle single position update
+                            handlePlaneData(data);
+                            // Update last update time for auto-reconnect
+                            lastUpdateTime = Date.now();
+                        }
+                        else if (data.type === 'positions') {
+                            // Handle batch of position updates
+                            if (data.data && Array.isArray(data.data)) {
+                                data.data.forEach(positionData => {
+                                    if (positionData.planeId) {
+                                        const singleUpdate = {
+                                            type: 'position',
+                                            planeId: positionData.planeId,
+                                            data: positionData
+                                        };
+                                        handlePlaneData(singleUpdate);
+                                    }
+                                });
+                                // Update last update time for auto-reconnect
+                                lastUpdateTime = Date.now();
+                            }
+                        }
+                        
+                        // Update last update time
+                        const now = new Date();
+                        lastUpdateTimeElement.textContent = now.toLocaleTimeString();
+                    } catch (error) {
+                        console.error('Error parsing WebSocket message:', error);
+                        console.log('Raw message:', event.data);
+                    }
+                };
+                
+                socket.onclose = () => {
+                    console.log('Disconnected from WebSocket server');
+                    connectionStatus.textContent = 'Status: Disconnected';
+                    connectionStatusValue.textContent = 'Disconnected';
+                    connectionStatus.style.color = '#ff0000';
+                    connectionStatusValue.style.color = '#ff0000';
+                    
+                    // Increment reconnect attempts
+                    reconnectAttempts++;
+                    
+                    if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+                        console.log(`Failed to connect after ${MAX_RECONNECT_ATTEMPTS} attempts`);
+                    } else {
+                        console.log(`Reconnect attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}`);
+                        // Try to reconnect after 5 seconds
+                        setTimeout(connectWebSocket, 5000);
+                    }
+                };
+                
+                socket.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    connectionStatus.textContent = 'Status: Error';
+                    connectionStatusValue.textContent = 'Error';
+                    connectionStatus.style.color = '#ff0000';
+                    connectionStatusValue.style.color = '#ff0000';
+                };
+                
+            } catch (error) {
+                console.error('Failed to connect to WebSocket server:', error);
+                connectionStatus.textContent = 'Status: Connection Failed';
+                connectionStatusValue.textContent = 'Connection Failed';
+                connectionStatus.style.color = '#ff0000';
+                connectionStatusValue.style.color = '#ff0000';
+                
+                // Try to reconnect after 5 seconds
+                setTimeout(connectWebSocket, 5000);
+            }
+        }
+        
+        // Handle incoming plane data
+        function handlePlaneData(data) {
+            if (data.type !== 'position' || !data.planeId) return;
+            
+            let positionData = data.data;
+            
+            // Check if we have position data in the expected format
+            if (!positionData || (!positionData.x && !positionData.y && !positionData.z)) {
+                // Try to find position data in data.data.position
+                if (data.data && data.data.position) {
+                    positionData = data.data.position;
+                } else {
+                    console.error('Could not find position data in:', data);
+                    return;
+                }
+            }
+            
+            // Get or create plane data
+            let plane = planes.get(data.planeId);
+            
+            if (!plane) {
+                // Create new plane without visual element
+                plane = {
+                    id: data.planeId,
+                    position: { x: 0, y: 0, z: 0 },
+                    rotation: { x: 0, y: 0, z: 0 },
+                    speed: 0,
+                    heading: 0,
+                    verticalSpeed: 0,
+                    lastUpdate: Date.now(),
+                    creationTime: Date.now(), // Track when the plane was first created
+                    element: null, // Don't create element until plane has moved
+                    trails: [],
+                    lastTrailTime: 0,
+                    initialPosition: { x: positionData.x || 0, y: positionData.y || 0, z: positionData.z || 0 },
+                    hasMoved: false
+                };
+                
+                planes.set(data.planeId, plane);
+            }
+            
+            // Update plane data
+            if (positionData.x !== undefined) plane.position.x = positionData.x;
+            if (positionData.y !== undefined) plane.position.y = positionData.y;
+            if (positionData.z !== undefined) plane.position.z = positionData.z;
+            
+            if (positionData.rotationX !== undefined) plane.rotation.x = positionData.rotationX;
+            if (positionData.rotationY !== undefined) plane.rotation.y = positionData.rotationY;
+            if (positionData.rotationZ !== undefined) plane.rotation.z = positionData.rotationZ;
+            
+            plane.speed = positionData.speed || 0;
+            plane.heading = positionData.heading || 0;
+            plane.verticalSpeed = positionData.verticalSpeed || 0;
+            plane.lastUpdate = Date.now();
+            
+            // Check if the plane has moved from its initial position
+            if (!plane.hasMoved) {
+                const dx = plane.position.x - plane.initialPosition.x;
+                const dy = plane.position.y - plane.initialPosition.y;
+                const dz = plane.position.z - plane.initialPosition.z;
+                
+                // Calculate distance moved (squared to avoid sqrt for performance)
+                const distanceSquared = dx*dx + dy*dy + dz*dz;
+                
+                // Consider the plane moved if it's moved more than 1 unit in any direction
+                if (distanceSquared > 1) {
+                    plane.hasMoved = true;
+                    
+                    // Create and add visual element now that the plane has moved
+                    if (!plane.element) {
+                        plane.element = createPlaneElement(plane.id);
+                        radar.appendChild(plane.element);
+                    }
+                }
+            }
+            
+            // Add trail point if enough time has passed
+            if (showTrails && Date.now() - plane.lastTrailTime > TRAIL_INTERVAL) {
+                addTrailPoint(plane);
+                plane.lastTrailTime = Date.now();
+            }
+            
+            // Update plane position on radar
+            updatePlanePosition(plane);
+            
+            // Update active planes count
+            updateActivePlanesCount();
+            
+            // Update plane in the list if it has moved - let the debounced function handle this
+            if (plane.hasMoved) {
+                // Don't call updatePlaneListItem directly, let the interval handle it
+                // This will be handled by the periodic updatePlaneList call
+            }
+            
+            // Update selected plane info if this is the selected plane
+            if (selectedPlaneId === plane.id) {
+                updateSelectedPlaneInfo();
+            }
+        }
+        
+        // Create plane element
+        function createPlaneElement(planeId) {
+            const planeElement = document.createElement('div');
+            planeElement.className = 'plane';
+            planeElement.dataset.planeId = planeId;
+            
+            // Create SVG plane icon
+            const svgNS = "http://www.w3.org/2000/svg";
+            const svg = document.createElementNS(svgNS, "svg");
+            svg.setAttribute("viewBox", "0 0 24 24");
+            svg.setAttribute("width", "20");
+            svg.setAttribute("height", "20");
+            svg.classList.add("plane-icon");
+            
+            // Create a triangle pointing upward (will be rotated based on heading)
+            const path = document.createElementNS(svgNS, "path");
+            path.setAttribute("d", "M12,2L20,20H4L12,2");
+            svg.appendChild(path);
+            
+            // Create label
+            const label = document.createElement('div');
+            label.className = 'plane-label';
+            label.textContent = planeId;
+            
+            planeElement.appendChild(svg);
+            planeElement.appendChild(label);
+            
+            // Add click event to select plane
+            planeElement.addEventListener('click', () => {
+                selectPlane(planeId);
+            });
+            
+            return planeElement;
+        }
+        
+        // Update plane position on radar
+        function updatePlanePosition(plane) {
+            // Skip planes that don't have visual elements yet
+            if (!plane.element) return;
+            
+            const radarRect = radar.getBoundingClientRect();
+            const radarRadius = radarRect.width / 2;
+            
+            // Calculate position relative to radar center and scale
+            const relX = (plane.position.x - radarCenter.x) / scale;
+            const relZ = (plane.position.z - radarCenter.z) / scale;
+            
+            // Convert to screen coordinates (radar is a circle with radius = radarRadius)
+            const screenX = radarRadius * (1 + relX);
+            const screenZ = radarRadius * (1 - relZ); // Invert Z axis to match game coordinates
+            
+            // Update plane element position
+            plane.element.style.left = `${screenX}px`;
+            plane.element.style.top = `${screenZ}px`;
+            
+            // Update altitude-based class
+            const altitude = plane.position.y - 35.2; // Ground level is at 35.2
+            plane.element.classList.remove('altitude-low', 'altitude-medium', 'altitude-high', 'altitude-very-high');
+            
+            if (altitude < 100) {
+                plane.element.classList.add('altitude-low');
+            } else if (altitude < 300) {
+                plane.element.classList.add('altitude-medium');
+            } else if (altitude < 600) {
+                plane.element.classList.add('altitude-high');
+            } else {
+                plane.element.classList.add('altitude-very-high');
+            }
+            
+            // Calculate opacity based on time since last update
+            const timeSinceUpdate = Date.now() - plane.lastUpdate;
+            let opacity = 1.0;
+            
+            // Only show planes that have moved from their initial position
+            if (!plane.hasMoved) {
+                opacity = 0; // Hide planes that haven't moved
+            } 
+            // Hide planes below 30ft unless showLanded is true
+            else if (plane.position.y - 35.2 < LANDED_ALTITUDE_THRESHOLD && !showLanded) {
+                opacity = 0; // Hide landed planes
+            }
+            else if (timeSinceUpdate > PLANE_FADE_START) {
+                // Calculate fade progress (0 to 1)
+                const fadeProgress = Math.min(1, (timeSinceUpdate - PLANE_FADE_START) / PLANE_FADE_DURATION);
+                opacity = 1.0 - fadeProgress;
+            }
+            
+            // Apply opacity to plane element
+            plane.element.style.opacity = opacity;
+            
+            // Force a reflow to ensure CSS transitions are applied
+            void plane.element.offsetWidth;
+            
+            // Update plane rotation (heading)
+            const headingRad = (plane.heading * Math.PI) / 180;
+            // Adjust rotation to make the triangle point in the direction of travel
+            // The SVG triangle points up by default, so we need to rotate it 90 degrees
+            // to match the game's coordinate system where 0 degrees is north
+            const rotationDeg = (headingRad * 180) / Math.PI + 180;
+            
+            // Get the SVG element and rotate it
+            const svg = plane.element.querySelector('.plane-icon');
+            if (svg) {
+                svg.style.transform = `rotate(${rotationDeg}deg)`;
+            }
+            
+            // Update trail positions
+            if (showTrails) {
+                plane.trails.forEach((trail, index) => {
+                    const trailRelX = (trail.x - radarCenter.x) / scale;
+                    const trailRelZ = (trail.z - radarCenter.z) / scale;
+                    
+                    const trailScreenX = radarRadius * (1 + trailRelX);
+                    const trailScreenZ = radarRadius * (1 - trailRelZ);
+                    
+                    trail.element.style.left = `${trailScreenX}px`;
+                    trail.element.style.top = `${trailScreenZ}px`;
+                    
+                    // Fade out older trails
+                    const opacity = 0.5 * (1 - index / TRAIL_LENGTH);
+                    trail.element.style.opacity = opacity;
+                });
+            }
+        }
+        
+        // Add trail point for a plane
+        function addTrailPoint(plane) {
+            // Skip planes that don't have visual elements yet
+            if (!plane.element) return;
+            
+            // Skip planes that are hidden (below altitude threshold or haven't moved)
+            if (!plane.hasMoved) return;
+            
+            // Skip planes below altitude threshold unless showLanded is true
+            const altitude = plane.position.y - 35.2;
+            if (altitude < LANDED_ALTITUDE_THRESHOLD && !showLanded) return;
+            
+            const trailPoint = {
+                x: plane.position.x,
+                y: plane.position.y,
+                z: plane.position.z,
+                element: document.createElement('div')
+            };
+            
+            trailPoint.element.className = 'plane-trail';
+            radar.appendChild(trailPoint.element);
+            
+            // Add to beginning of array
+            plane.trails.unshift(trailPoint);
+            
+            // Limit trail length
+            if (plane.trails.length > TRAIL_LENGTH) {
+                const removedTrail = plane.trails.pop();
+                if (removedTrail.element.parentNode) {
+                    removedTrail.element.parentNode.removeChild(removedTrail.element);
+                }
+            }
+        }
+        
+        // Center on a specific plane
+        function centerOnPlane(planeId) {
+            const plane = planes.get(planeId);
+            if (plane) {
+                radarCenter.x = plane.position.x;
+                radarCenter.z = plane.position.z;
+                
+                // Add visual feedback
+                addCenteringEffect(plane.position.x, plane.position.z);
+                
+                updateAllPlanePositions();
+            }
+        }
+        
+        // Select a plane
+        function selectPlane(planeId) {
+            // Deselect previously selected plane
+            if (selectedPlaneId) {
+                const prevPlane = planes.get(selectedPlaneId);
+                if (prevPlane && prevPlane.element) {
+                    prevPlane.element.style.border = 'none';
+                }
+                
+                // Remove selected class from list item
+                const prevListItem = document.getElementById(`plane-list-item-${selectedPlaneId}`);
+                if (prevListItem) {
+                    prevListItem.classList.remove('selected');
+                }
+            }
+            
+            selectedPlaneId = planeId;
+            
+            // Enable/disable center-selected button based on selection state
+            document.getElementById('deselect-plane').disabled = !selectedPlaneId;
+            
+            // Highlight selected plane
+            const plane = planes.get(planeId);
+            if (plane && plane.element) {
+                plane.element.style.border = '2px solid #ffff00';
+                
+                // Center the radar view on the selected plane
+                centerOnPlane(planeId);
+            }
+            
+            // Highlight list item
+            const listItem = document.getElementById(`plane-list-item-${planeId}`);
+            if (listItem) {
+                listItem.classList.add('selected');
+            }
+            
+            // Update selected plane info
+            updateSelectedPlaneInfo();
+        }
+        
+        // Add a visual feedback effect when centering on a plane
+        function addCenteringEffect(x, z) {
+            const effect = document.createElement('div');
+            effect.className = 'centering-effect';
+            radar.appendChild(effect);
+            
+            // Position the effect at the center of the radar
+            const radarRect = radar.getBoundingClientRect();
+            const radarRadius = radarRect.width / 2;
+            effect.style.left = `${radarRadius}px`;
+            effect.style.top = `${radarRadius}px`;
+            
+            // Remove the effect after animation completes
+            setTimeout(() => {
+                if (effect.parentNode) {
+                    effect.parentNode.removeChild(effect);
+                }
+            }, 1000);
+        }
+        
+        // Update selected plane info
+        function updateSelectedPlaneInfo() {
+            if (!selectedPlaneId) {
+                selectedPlaneIdElement.textContent = 'None';
+                selectedPlanePosition.textContent = '--';
+                selectedPlaneAltitude.textContent = '--';
+                selectedPlaneHeading.textContent = '--';
+                selectedPlaneSpeed.textContent = '--';
+                document.getElementById('deselect-plane').disabled = true;
+                return;
+            }
+            
+            const plane = planes.get(selectedPlaneId);
+            if (!plane) {
+                selectedPlaneIdElement.textContent = 'None';
+                selectedPlanePosition.textContent = '--';
+                selectedPlaneAltitude.textContent = '--';
+                selectedPlaneHeading.textContent = '--';
+                selectedPlaneSpeed.textContent = '--';
+                document.getElementById('deselect-plane').disabled = true;
+                selectedPlaneId = null;
+                return;
+            }
+            
+            document.getElementById('deselect-plane').disabled = false;
+            selectedPlaneIdElement.textContent = plane.id;
+            selectedPlanePosition.textContent = `X: ${Math.round(plane.position.x)}, Z: ${Math.round(plane.position.z)}`;
+            
+            // Convert Y position to feet (game units * 33.33)
+            const altitudeFeet = Math.round((plane.position.y - 35.2) * 33.33);
+            selectedPlaneAltitude.textContent = `${altitudeFeet} ft`;
+            
+            selectedPlaneHeading.textContent = `${Math.round(plane.heading)}°`;
+            
+            // Convert speed to km/h (game units * 525)
+            const speedKmh = Math.round(plane.speed * 525);
+            selectedPlaneSpeed.textContent = `${speedKmh} km/h`;
+        }
+        
+        // Update active planes count
+        function updateActivePlanesCount() {
+            const now = Date.now();
+            let activeCount = 0;
+            
+            planes.forEach(plane => {
+                const timeSinceUpdate = now - plane.lastUpdate;
+                
+                // Only count planes that have moved as active
+                if (plane.hasMoved) {
+                    // Consider planes active if they've been updated recently
+                    if (timeSinceUpdate < PLANE_FADE_START) {
+                        activeCount++;
+                    } 
+                    // Remove planes that have completely faded out (fade start + duration)
+                    else if (timeSinceUpdate > PLANE_FADE_START + PLANE_FADE_DURATION) {
+                        // Remove plane element if it exists
+                        if (plane.element && plane.element.parentNode) {
+                            plane.element.parentNode.removeChild(plane.element);
+                        }
+                        
+                        // Remove trail elements
+                        plane.trails.forEach(trail => {
+                            if (trail.element.parentNode) {
+                                trail.element.parentNode.removeChild(trail.element);
+                            }
+                        });
+                        
+                        // Remove from planes map
+                        planes.delete(plane.id);
+                        
+                        // Remove from plane list
+                        const listItem = document.getElementById(`plane-list-item-${plane.id}`);
+                        if (listItem) {
+                            listItem.remove();
+                        }
+                        
+                        // If this was the selected plane, clear selection
+                        if (selectedPlaneId === plane.id) {
+                            selectedPlaneId = null;
+                            updateSelectedPlaneInfo();
+                        }
+                    }
+                    // Partially faded planes are still counted as active
+                    else {
+                        activeCount++;
+                    }
+                } else {
+                    // For planes that haven't moved, only remove them if they're very old
+                    if (timeSinceUpdate > PLANE_FADE_START + PLANE_FADE_DURATION * 2) {
+                        // Remove plane element if it exists (shouldn't exist, but just in case)
+                        if (plane.element && plane.element.parentNode) {
+                            plane.element.parentNode.removeChild(plane.element);
+                        }
+                        
+                        // Remove trail elements
+                        plane.trails.forEach(trail => {
+                            if (trail.element.parentNode) {
+                                trail.element.parentNode.removeChild(trail.element);
+                            }
+                        });
+                        
+                        // Remove from planes map
+                        planes.delete(plane.id);
+                        
+                        // If this was the selected plane, clear selection
+                        if (selectedPlaneId === plane.id) {
+                            selectedPlaneId = null;
+                            updateSelectedPlaneInfo();
+                        }
+                    }
+                }
+            });
+            
+            activePlanesCount.textContent = activeCount;
+        }
+        
+        // Update all planes positions
+        function updateAllPlanePositions() {
+            planes.forEach(plane => {
+                updatePlanePosition(plane);
+            });
+        }
+        
+        // Zoom in button
+        document.getElementById('zoom-in').addEventListener('click', () => {
+            scale = Math.max(scale / 1.5, 100);
+            scaleValue.textContent = scale;
+            updateRadarCircles();
+            updateAllPlanePositions();
+        });
+        
+        // Zoom out button
+        document.getElementById('zoom-out').addEventListener('click', () => {
+            scale = Math.min(scale * 1.5, 5000);
+            scaleValue.textContent = scale;
+            updateRadarCircles();
+            updateAllPlanePositions();
+        });
+        
+        // Center view button
+        document.getElementById('center-view').addEventListener('click', () => {
+            if (selectedPlaneId) {
+                // If a plane is selected, center on that plane
+                centerOnPlane(selectedPlaneId);
+            } else {
+                // If no plane is selected, center the map
+                radarCenter = { x: 0, z: 0 };
+                updateAllPlanePositions();
+            }
+        });
+        
+        // Deselect plane button
+        document.getElementById('deselect-plane').addEventListener('click', () => {
+            if (selectedPlaneId) {
+                // Deselect the plane
+                const plane = planes.get(selectedPlaneId);
+                if (plane && plane.element) {
+                    plane.element.style.border = 'none';
+                }
+                
+                // Remove selected class from list item
+                const listItem = document.getElementById(`plane-list-item-${selectedPlaneId}`);
+                if (listItem) {
+                    listItem.classList.remove('selected');
+                }
+                
+                // Clear selection
+                selectedPlaneId = null;
+                updateSelectedPlaneInfo();
+            }
+        });
+        
+        // Toggle trails button
+        document.getElementById('toggle-trails').addEventListener('click', () => {
+            showTrails = !showTrails;
+            
+            // Show/hide existing trails
+            planes.forEach(plane => {
+                plane.trails.forEach(trail => {
+                    trail.element.style.display = showTrails ? 'block' : 'none';
+                });
+            });
+        });
+        
+        // Toggle landed button
+        document.getElementById('toggle-landed').addEventListener('click', () => {
+            showLanded = !showLanded;
+            document.getElementById('toggle-landed').textContent = showLanded ? 'Hide Landed' : 'Show Landed';
+            
+            // Update all plane visibilities
+            updateAllPlanePositions();
+            
+            // Force an immediate update of the plane list
+            lastPlaneListUpdate = 0;
+            updatePlaneList();
+        });
+        
+        // Update radar circles when scale changes
+        function updateRadarCircles() {
+            // Remove existing circles and labels
+            const existingCircles = document.querySelectorAll('.radar-circle, .coordinate-label');
+            existingCircles.forEach(element => element.remove());
+            
+            // Create new circles with updated scale
+            createRadarCircles();
+        }
+        
+        // Drag functionality for panning the radar view
+        let isDragging = false;
+        let dragStartX = 0;
+        let dragStartY = 0;
+        let dragStartCenterX = 0;
+        let dragStartCenterZ = 0;
+        
+        radar.addEventListener('mousedown', (event) => {
+            isDragging = true;
+            dragStartX = event.clientX;
+            dragStartY = event.clientY;
+            dragStartCenterX = radarCenter.x;
+            dragStartCenterZ = radarCenter.z;
+            radar.style.cursor = 'grabbing';
+        });
+        
+        document.addEventListener('mousemove', (event) => {
+            if (!isDragging) return;
+            
+            const radarRect = radar.getBoundingClientRect();
+            const radarRadius = radarRect.width / 2;
+            
+            const deltaX = event.clientX - dragStartX;
+            const deltaY = event.clientY - dragStartY;
+            
+            // Convert screen delta to game coordinates
+            const gameUnitDeltaX = (deltaX / radarRadius) * scale;
+            const gameUnitDeltaZ = (deltaY / radarRadius) * scale;
+            
+            // Update radar center (invert Z axis)
+            radarCenter.x = dragStartCenterX - gameUnitDeltaX;
+            radarCenter.z = dragStartCenterZ + gameUnitDeltaZ;
+            
+            // Update all plane positions
+            updateAllPlanePositions();
+        });
+        
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+            radar.style.cursor = 'default';
+        });
+        
+        // Mouse wheel zoom
+        radar.addEventListener('wheel', (event) => {
+            event.preventDefault();
+            
+            if (event.deltaY < 0) {
+                // Zoom in
+                scale = Math.max(scale / 1.1, 100);
+            } else {
+                // Zoom out
+                scale = Math.min(scale * 1.1, 5000);
+            }
+            
+            scaleValue.textContent = Math.round(scale);
+            updateRadarCircles();
+            updateAllPlanePositions();
+        });
+        
+        // Periodically check for inactive planes
+        setInterval(() => {
+            updateActivePlanesCount();
+        }, 1000); // Check every second (was 5000)
+        
+        // Check for server connection status and auto-reconnect if needed
+        setInterval(() => {
+            const timeSinceLastUpdate = Date.now() - lastUpdateTime;
+            
+            // Update connection status with time since last update
+            const seconds = Math.floor(timeSinceLastUpdate / 1000);
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                connectionStatus.textContent = `Status: Connected`;
+                connectionStatusValue.textContent = 'Connected';
+                
+                // Change color based on time since last update
+                if (seconds > 4) {
+                    connectionStatus.style.color = '#ffaa00'; // Yellow warning
+                    connectionStatusValue.style.color = '#ffaa00';
+                } else {
+                    connectionStatus.style.color = '#00ff00'; // Green normal
+                    connectionStatusValue.style.color = '#00ff00';
+                }
+            }
+            
+            // If no updates received within timeout period, reconnect
+            if (timeSinceLastUpdate > NO_UPDATE_RECONNECT_TIMEOUT) {
+                console.log(`No updates received for ${timeSinceLastUpdate}ms, reconnecting...`);
+                
+                // Only reconnect if socket is open (to avoid reconnecting during reconnection)
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    connectionStatus.textContent = 'Status: Auto-reconnecting...';
+                    connectionStatusValue.textContent = 'Auto-reconnecting...';
+                    connectionStatus.style.color = '#ffaa00';
+                    connectionStatusValue.style.color = '#ffaa00';
+                    
+                    // Close current connection
+                    socket.close();
+                    
+                    // Reset reconnect attempts
+                    reconnectAttempts = 0;
+                    
+                    // Try to reconnect
+                    setTimeout(connectWebSocket, 1000);
+                }
+                
+                // Update last update time to prevent multiple reconnects
+                lastUpdateTime = Date.now();
+            }
+        }, 1000); // Check every second
+        
+        // Send heartbeat regularly to keep the connection alive
+        setInterval(() => {
+            sendHeartbeat();
+        }, 100); // Check frequently, but sendHeartbeat has its own rate limiting
+        
+        // Send heartbeat to keep the connection alive
+        function sendHeartbeat() {
+            if (!socket || socket.readyState !== WebSocket.OPEN || !ourPlaneId || !ourSecretKey) {
+                return;
+            }
+            
+            const currentTime = Date.now();
+            if (currentTime - lastHeartbeatTime < HEARTBEAT_INTERVAL * 1000) {
+                return;
+            }
+            
+            
+            // Create a position with small random variations to simulate activity
+            // Keep the ATC position near the center of the map but with small variations
+            const positionData = {
+                x: Math.random() * 10 - 5, // Small random position near center
+                y: 36 + Math.random() * 5, // Just above ground level with small variation
+                z: Math.random() * 10 - 5, // Small random position near center
+                rotationX: Math.random() * 0.1,
+                rotationY: Math.random() * 0.1,
+                rotationZ: Math.random() * 0.1,
+                speed: 0.01 + Math.random() * 0.05, // Very slow speed
+                heading: (Date.now() / 1000) % 360, // Slowly rotating heading
+                verticalSpeed: Math.random() * 0.01 - 0.005, // Small random vertical speed
+                timestamp: currentTime
+            };
+            
+            // Generate validation hash
+            const v = gv(positionData, ourSecretKey);
+            
+            const message = {
+                type: 'position',
+                planeId: ourPlaneId,
+                data: positionData,
+                v: v
+            };
+            
+            // Log heartbeat occasionally (only once every ~5 minutes)
+            if (Math.random() < 0.0001) {
+                console.log('Sending heartbeat');
+            }
+            
+            try {
+                socket.send(JSON.stringify(message));
+                lastHeartbeatTime = currentTime;
+            } catch (err) {
+                console.error('❌ Failed to send heartbeat:', err);
+            }
+        }
+        
+        // Periodically update all plane positions and opacities
+        function updateAllPlanesOpacity() {
+            planes.forEach(plane => {
+                // Skip planes that don't have visual elements yet
+                if (!plane.element) return;
+                
+                // Calculate opacity based on time since last update
+                const timeSinceUpdate = Date.now() - plane.lastUpdate;
+                let opacity = 1.0;
+                
+                // Only show planes that have moved from their initial position
+                if (!plane.hasMoved) {
+                    opacity = 0; // Hide planes that haven't moved
+                } 
+                // Hide planes below 30ft unless showLanded is true
+                else if (plane.position.y - 35.2 < LANDED_ALTITUDE_THRESHOLD && !showLanded) {
+                    opacity = 0; // Hide landed planes
+                }
+                else if (timeSinceUpdate > PLANE_FADE_START) {
+                    // Calculate fade progress (0 to 1)
+                    const fadeProgress = Math.min(1, (timeSinceUpdate - PLANE_FADE_START) / PLANE_FADE_DURATION);
+                    opacity = 1.0 - fadeProgress;
+                    
+                    // Apply opacity to plane element
+                    plane.element.style.opacity = opacity;
+                }
+            });
+            
+            // Request next frame
+            requestAnimationFrame(updateAllPlanesOpacity);
+        }
+        
+        // Start the continuous update loop
+        requestAnimationFrame(updateAllPlanesOpacity);
+        
+        // Connect to WebSocket server on page load
+        window.addEventListener('load', () => {
+            // Make a POST request to the hit counter API
+            // Nothing neferious, just to see how it's doing!
+            fetch('http://danperks.dev/api/hits/atc', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    timestamp: Date.now()
+                })
+            })
+                
+            connectWebSocket();
+            
+            // Set initial button text for toggle-landed
+            document.getElementById('toggle-landed').textContent = showLanded ? 'Hide Landed' : 'Show Landed';
+            
+            // Check if screen is wide enough for plane list
+            checkScreenWidth();
+            
+            // Initialize plane list with existing planes
+            updatePlaneList();
+            
+            // Set up periodic plane list updates
+            setInterval(updatePlaneList, PLANE_LIST_UPDATE_INTERVAL);
+            
+            // Add event listener for launch button
+            document.getElementById('launch-button').addEventListener('click', () => {
+                window.open('https://fly.pieter.com', '_blank');
+            });
+            
+            // Add event listeners for clickable text elements
+            document.getElementById('cursor-link').addEventListener('click', () => {
+                window.open('https://cursor.com', '_blank');
+            });
+            
+            document.getElementById('dan-perks-link').addEventListener('click', () => {
+                window.open('https://danperks.dev', '_blank');
+            });
+        });
+        
+        // Update plane list with current planes
+        function updatePlaneList() {
+            // Only update if the plane list is visible
+            if (planeListContainer.style.display !== 'block') return;
+            
+            // Debounce updates to once per second
+            const now = Date.now();
+            if (now - lastPlaneListUpdate < PLANE_LIST_UPDATE_INTERVAL) return;
+            lastPlaneListUpdate = now;
+            
+            // Get all planes sorted by creation time (oldest first)
+            const sortedPlanes = Array.from(planes.values())
+                .filter(plane => {
+                    // Only show planes that have moved
+                    if (!plane.hasMoved) return false;
+                    
+                    // Hide planes below altitude threshold unless showLanded is true
+                    const altitude = plane.position.y - 35.2;
+                    if (altitude < LANDED_ALTITUDE_THRESHOLD && !showLanded) return false;
+                    
+                    return true;
+                })
+                .sort((a, b) => a.creationTime - b.creationTime); // Sort by creation time, oldest first
+            
+            // Update each plane in the list
+            sortedPlanes.forEach(plane => {
+                updatePlaneListItem(plane, true); // Pass true to indicate this is a batch update
+            });
+            
+            // Remove list items for planes that should be hidden
+            const listItems = planeList.querySelectorAll('.plane-list-item');
+            listItems.forEach(item => {
+                const itemPlaneId = item.id.replace('plane-list-item-', '');
+                const plane = planes.get(itemPlaneId);
+                
+                if (!plane || !plane.hasMoved) {
+                    item.remove();
+                    return;
+                }
+                
+                const altitude = plane.position.y - 35.2;
+                if (altitude < LANDED_ALTITUDE_THRESHOLD && !showLanded) {
+                    item.remove();
+                }
+            });
+        }
+        
+        // Update or create a plane list item
+        function updatePlaneListItem(plane, isBatchUpdate = false) {
+            // Only update if the plane list is visible
+            if (planeListContainer.style.display !== 'block') return;
+            
+            // Check if the plane should be visible
+            if (!plane.hasMoved) return;
+            
+            // If not a batch update, apply debouncing
+            if (!isBatchUpdate) {
+                const now = Date.now();
+                if (now - lastPlaneListUpdate < PLANE_LIST_UPDATE_INTERVAL) return;
+                lastPlaneListUpdate = now;
+            }
+            
+            // Check if the plane is below altitude threshold and should be hidden
+            const altitude = plane.position.y - 35.2;
+            if (altitude < LANDED_ALTITUDE_THRESHOLD && !showLanded) {
+                // Remove the list item if it exists
+                const existingItem = document.getElementById(`plane-list-item-${plane.id}`);
+                if (existingItem) {
+                    existingItem.remove();
+                }
+                return;
+            }
+            
+            const planeId = plane.id;
+            let listItem = document.getElementById(`plane-list-item-${planeId}`);
+            const isNewItem = !listItem;
+            
+            
+            // If the plane doesn't have a list item yet, create one
+            if (isNewItem) {
+                listItem = document.createElement('div');
+                listItem.id = `plane-list-item-${planeId}`;
+                listItem.className = 'plane-list-item new-plane';
+                
+                // Censor plane ID if longer than 6 characters
+                const displayId = planeId.length > 6 ? planeId.substring(0, 6) + '...' : planeId;
+                
+                listItem.innerHTML = `
+                    <div class="plane-list-color"></div>
+                    <div class="plane-list-info">
+                        <div class="plane-list-id">${displayId}</div>
+                        <div class="plane-list-time">0s</div>
+                    </div>
+                `;
+                
+                // Add click event to select the plane
+                listItem.addEventListener('click', () => {
+                    selectPlane(planeId);
+                });
+                
+                // Add to the list based on creation time
+                let inserted = false;
+                const items = planeList.querySelectorAll('.plane-list-item');
+                for (let i = 0; i < items.length; i++) {
+                    const itemId = items[i].id.replace('plane-list-item-', '');
+                    const existingPlane = planes.get(itemId);
+                    if (existingPlane && existingPlane.creationTime > plane.creationTime) {
+                        planeList.insertBefore(listItem, items[i]);
+                        inserted = true;
+                        break;
+                    }
+                }
+                
+                if (!inserted) {
+                    planeList.appendChild(listItem);
+                }
+                
+                // Remove the new-plane class after animation completes
+                setTimeout(() => {
+                    listItem.classList.remove('new-plane');
+                }, 1000);
+            }
+            
+            // Update the color based on altitude
+            const colorElement = listItem.querySelector('.plane-list-color');
+            
+            if (altitude < 30 && !showLanded) {
+                // Landed planes (only visible when showLanded is true)
+                colorElement.style.backgroundColor = '#555555';
+            } else if (altitude < 100) {
+                colorElement.style.backgroundColor = '#00ff00'; // Green for low altitude
+            } else if (altitude < 300) {
+                colorElement.style.backgroundColor = '#ffff00'; // Yellow for medium altitude
+            } else if (altitude < 600) {
+                colorElement.style.backgroundColor = '#ff00ff'; // Magenta for high altitude
+            } else {
+                colorElement.style.backgroundColor = '#00ffff'; // Cyan for very high altitude
+            }
+            
+            // Update the time since creation
+            const existenceTime = Math.floor((Date.now() - plane.creationTime) / 1000);
+            listItem.querySelector('.plane-list-time').textContent = `${existenceTime}s`;
+            
+            // Highlight if selected
+            if (selectedPlaneId === planeId) {
+                listItem.classList.add('selected');
+            } else {
+                listItem.classList.remove('selected');
+            }
+        }
+        
+        // Update plane list times periodically
+        function updatePlaneListTimes() {
+            // Only update if the plane list is visible
+            if (planeListContainer.style.display !== 'block') return;
+            
+            const now = Date.now();
+            
+            // Update the time for each plane in the list
+            planes.forEach(plane => {
+                if (plane.hasMoved) {
+                    const listItem = document.getElementById(`plane-list-item-${plane.id}`);
+                    if (listItem) {
+                        const existenceTime = Math.floor((now - plane.creationTime) / 1000);
+                        listItem.querySelector('.plane-list-time').textContent = `${existenceTime}s`;
+                    }
+                }
+            });
+        }
+        
+        // Update plane list times every second
+        setInterval(updatePlaneListTimes, 1000);
+    </script>
+</body>
+</html>
