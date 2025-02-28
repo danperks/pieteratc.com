@@ -632,6 +632,37 @@
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
     <script>
+        // Add bad word list at top of script
+        const BAD_WORDS = [
+            "nigger", "nigga", "n1gger", "n1gga", "negro", "n3gro", "n!gger", "n!gga",
+            "faggot", "fag", "f4ggot", "f4g", "f@ggot", "f@g", "fagg0t", "f@gg0t",
+            "chink", "gook", "spic", "kike", "kyke", "ch1nk", "g00k", "sp1c", "k1ke",
+            "retard", "r3tard", "tard", "cunt", "r3t@rd", "ret@rd", "c*nt", "c@nt",
+            "hitler", "nazi", "h1tler", "n4zi", "h!tler", "naz1", "n@zi", "h1tl3r",
+            "rape", "r4pe", "rapist", "r4pist", "r@pe", "r@pist", "r@p1st", "r4p1st",
+            "kill yourself", "kys", "suicide", "su1c1de", "k1ll yourself", "k!ll yourself",
+            "whore", "slut", "bitch", "b1tch", "wh0re", "sl*t", "b!tch", "b*tch", "h0e", "hoe",
+            "penis", "vagina", "pussy", "dick", "cock", "p3nis", "v@gina", "p*ssy", "d!ck", "c0ck",
+            "cum", "jizz", "porn", "anal", "c*m", "j!zz", "p0rn", "@nal", "@nus",
+            "blowjob", "bl0wjob", "handjob", "h@ndjob", "rimjob", "r1mjob",
+            "dildo", "d1ldo", "vibrator", "v1brator", "buttplug", "buttp1ug",
+            "orgasm", "0rgasm", "orgy", "0rgy", "gangbang", "g@ngbang",
+            "masturbate", "m@sturbate", "jackoff", "j@ckoff", "wank", "w@nk",
+            "asshole", "@sshole", "a$$hole", "a$$h0le", "a**hole", "a**h0le",
+            "shit", "sh1t", "sh!t", "bullshit", "bullsh1t", "f*ck", "fuck", "fuk", "fucker", "f*cker",
+            "motherfucker", "motherf*cker", "m0therf*cker", "m0therfucker",
+            "tits", "t1ts", "boobs", "b00bs", "titties", "t1tties"
+        ];
+
+        // Add after other global variables
+        let selfUsername;
+
+        // Connect to WebSocket server on page load
+        document.getElementById('launch-button').addEventListener('click', function() {
+            // Open fly.html directly
+            window.open('https://fly.pieter.com', '_blank');
+        });
+        
         // Configuration
         const WS_SERVER = 'wss://fly.pieter.com:8080';
         const MAX_PLANES = 100;
@@ -642,17 +673,19 @@
         
         let reconnectAttempts = 0;
         
-        // Helper functions for WebSocket handshake
+        // Function to generate a unique plane ID
         function generatePlaneId() {
             // Generate a random string of letters and numbers
             const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-            let id = 'ATC_';
+            let id = '';
             for (let i = 0; i < 6; i++) {
                 id += chars.charAt(Math.floor(Math.random() * chars.length));
             }
+            console.log('✈️ My plane ID:', id);
             return id;
         }
         
+        // Function to generate a secret key
         function generateSecretKey() {
             const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
             let key = '';
@@ -664,7 +697,7 @@
         
         function gv(data, secretKey) {
             // Create a string from position data and timestamp
-            const posString = `${data.x},${data.y},${data.z},${data.timestamp},${S}`;
+            const posString = `${data.x},${data.y},${data.z},${S}`;
             
             // Use a simple additive hash that works consistently across platforms
             let hash = 0;
@@ -803,15 +836,15 @@
                     
                     // Send a dummy position to initialize the connection
                     const initialPosition = {
-                        x: 0,
-                        y: 36,
-                        z: 0,
-                        rotationX: 0,
-                        rotationY: 0,
-                        rotationZ: 0,
-                        speed: 0,
-                        heading: 0,
-                        verticalSpeed: 0,
+                        x: Math.round(0 * 100) / 100,
+                        y: Math.round(36 * 100) / 100,
+                        z: Math.round(0 * 100) / 100,
+                        rotationX: Math.round(0 * 100) / 100,
+                        rotationY: Math.round(0 * 100) / 100,
+                        rotationZ: Math.round(0 * 100) / 100,
+                        speed: Math.round(0 * 100) / 100,
+                        heading: Math.round(0 * 100) / 100,
+                        verticalSpeed: Math.round(0 * 100) / 100,
                         timestamp: Date.now()
                     };
                     
@@ -932,14 +965,15 @@
                 // Create new plane without visual element
                 plane = {
                     id: data.planeId,
+                    username: data.data.username || 'Anonymous Pilot', // Extract username from data or use default
                     position: { x: 0, y: 0, z: 0 },
                     rotation: { x: 0, y: 0, z: 0 },
                     speed: 0,
                     heading: 0,
                     verticalSpeed: 0,
                     lastUpdate: Date.now(),
-                    creationTime: Date.now(), // Track when the plane was first created
-                    element: null, // Don't create element until plane has moved
+                    creationTime: Date.now(),
+                    element: null,
                     trails: [],
                     lastTrailTime: 0,
                     initialPosition: { x: positionData.x || 0, y: positionData.y || 0, z: positionData.z || 0 },
@@ -950,6 +984,7 @@
             }
             
             // Update plane data
+            if (positionData.username) plane.username = positionData.username;
             if (positionData.x !== undefined) plane.position.x = positionData.x;
             if (positionData.y !== undefined) plane.position.y = positionData.y;
             if (positionData.z !== undefined) plane.position.z = positionData.z;
@@ -979,7 +1014,9 @@
                     // Create and add visual element now that the plane has moved
                     if (!plane.element) {
                         plane.element = createPlaneElement(plane.id);
-                        radar.appendChild(plane.element);
+                        if (plane.element) {  // Only append if element was created successfully
+                            radar.appendChild(plane.element);
+                        }
                     }
                 }
             }
@@ -1010,6 +1047,9 @@
         
         // Create plane element
         function createPlaneElement(planeId) {
+            const plane = planes.get(planeId);
+            if (!plane) return null;
+
             const planeElement = document.createElement('div');
             planeElement.className = 'plane';
             planeElement.dataset.planeId = planeId;
@@ -1030,7 +1070,7 @@
             // Create label
             const label = document.createElement('div');
             label.className = 'plane-label';
-            label.textContent = planeId;
+            label.textContent = plane.username || 'Anonymous Pilot';
             
             planeElement.appendChild(svg);
             planeElement.appendChild(label);
@@ -1574,20 +1614,20 @@
                 return;
             }
             
-            
             // Create a position with small random variations to simulate activity
             // Keep the ATC position near the center of the map but with small variations
             const positionData = {
-                x: Math.random() * 10 - 5, // Small random position near center
-                y: 36 + Math.random() * 5, // Just above ground level with small variation
-                z: Math.random() * 10 - 5, // Small random position near center
-                rotationX: Math.random() * 0.1,
-                rotationY: Math.random() * 0.1,
-                rotationZ: Math.random() * 0.1,
-                speed: 0.01 + Math.random() * 0.05, // Very slow speed
-                heading: (Date.now() / 1000) % 360, // Slowly rotating heading
-                verticalSpeed: Math.random() * 0.01 - 0.005, // Small random vertical speed
-                timestamp: currentTime
+                x: Math.round((Math.random() * 10 - 5) * 100) / 100, // Small random position near center
+                y: Math.round((36 + Math.random() * 5) * 100) / 100, // Just above ground level with small variation
+                z: Math.round((Math.random() * 10 - 5) * 100) / 100, // Small random position near center
+                rotationX: Math.round((Math.random() * 0.1) * 100) / 100,
+                rotationY: Math.round((Math.random() * 0.1) * 100) / 100,
+                rotationZ: Math.round((Math.random() * 0.1) * 100) / 100,
+                speed: Math.round(0.01 + Math.random() * 0.05), // Very slow speed
+                heading: Math.round((Date.now() / 1000) % 360), // Slowly rotating heading
+                verticalSpeed: Math.round((Math.random() * 0.01 - 0.005) * 100) / 100, // Small random vertical speed
+                timestamp: currentTime,
+                username: 'ATC Viewer' // Fixed username instead of from localStorage
             };
             
             // Generate validation hash
@@ -1602,7 +1642,7 @@
             
             // Log heartbeat occasionally (only once every ~5 minutes)
             if (Math.random() < 0.0001) {
-                console.log('Sending heartbeat');
+                console.log('Sending heartbeat:', message);
             }
             
             try {
@@ -1650,9 +1690,16 @@
         
         // Connect to WebSocket server on page load
         window.addEventListener('load', () => {
+            // Add beforeunload event handler for reload warning
+            window.addEventListener('beforeunload', (e) => {
+                e.preventDefault();
+                e.returnValue = 'The multiplayer server only allows one connection at a time, so it may take a few seconds to reconnect if you reload the page! Are you sure you want to continue?';
+                return e.returnValue;
+            });
+
             // Make a POST request to the hit counter API
             // Nothing neferious, just to see how it's doing!
-            fetch('http://danperks.dev/api/hits/atc', {
+            fetch('https://danperks.dev/api/hits/atc', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -1768,7 +1815,6 @@
             let listItem = document.getElementById(`plane-list-item-${planeId}`);
             const isNewItem = !listItem;
             
-            
             // If the plane doesn't have a list item yet, create one
             if (isNewItem) {
                 listItem = document.createElement('div');
@@ -1776,12 +1822,12 @@
                 listItem.className = 'plane-list-item new-plane';
                 
                 // Censor plane ID if longer than 6 characters
-                const displayId = planeId.length > 6 ? planeId.substring(0, 6) + '...' : planeId;
+                const displayName = plane.username || 'Anonymous Pilot';
                 
                 listItem.innerHTML = `
                     <div class="plane-list-color"></div>
                     <div class="plane-list-info">
-                        <div class="plane-list-id">${displayId}</div>
+                        <div class="plane-list-id">${displayName}</div>
                         <div class="plane-list-time">0s</div>
                     </div>
                 `;
