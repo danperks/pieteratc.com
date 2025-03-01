@@ -816,7 +816,7 @@
                 // Add coordinate labels
                 const distance = Math.round(scale * ratio);
                 
-                // Top label
+                // Top label (positive Z)
                 const topLabel = document.createElement('div');
                 topLabel.className = 'coordinate-label';
                 topLabel.textContent = `${distance}`;
@@ -824,7 +824,7 @@
                 topLabel.style.left = '50%';
                 topLabel.style.transform = 'translateX(-50%)';
                 
-                // Bottom label
+                // Bottom label (negative Z)
                 const bottomLabel = document.createElement('div');
                 bottomLabel.className = 'coordinate-label';
                 bottomLabel.textContent = `-${distance}`;
@@ -832,18 +832,18 @@
                 bottomLabel.style.left = '50%';
                 bottomLabel.style.transform = 'translateX(-50%)';
                 
-                // Left label
+                // Left label (positive X) - Changed from negative to positive
                 const leftLabel = document.createElement('div');
                 leftLabel.className = 'coordinate-label';
-                leftLabel.textContent = `-${distance}`;
+                leftLabel.textContent = `${distance}`; // Changed from -${distance} to ${distance}
                 leftLabel.style.left = '5px';
                 leftLabel.style.top = '50%';
                 leftLabel.style.transform = 'translateY(-50%)';
                 
-                // Right label
+                // Right label (negative X) - Changed from positive to negative
                 const rightLabel = document.createElement('div');
                 rightLabel.className = 'coordinate-label';
-                rightLabel.textContent = `${distance}`;
+                rightLabel.textContent = `-${distance}`; // Changed from ${distance} to -${distance}
                 rightLabel.style.right = '5px';
                 rightLabel.style.top = '50%';
                 rightLabel.style.transform = 'translateY(-50%)';
@@ -872,7 +872,7 @@
             const runwayRelZ = (RUNWAY_Z - radarCenter.z) / scale;
             
             // Convert to screen coordinates
-            const runwayScreenX = radarRadius * (1 + runwayRelX);
+            const runwayScreenX = radarRadius * (1 - runwayRelX); // Changed from (1 + runwayRelX) to (1 - runwayRelX)
             const runwayScreenZ = radarRadius * (1 - runwayRelZ); // Invert Z axis
             
             // Update runway position
@@ -891,7 +891,7 @@
             const carrierRelZ = (CARRIER_Z - radarCenter.z) / scale;
             
             // Convert to screen coordinates
-            const carrierScreenX = radarRadius * (1 + carrierRelX);
+            const carrierScreenX = radarRadius * (1 - carrierRelX); // Changed from (1 + carrierRelX) to (1 - carrierRelX)
             const carrierScreenZ = radarRadius * (1 - carrierRelZ); // Invert Z axis
             
             // Update carrier position
@@ -1175,7 +1175,8 @@
             const relZ = (plane.position.z - radarCenter.z) / scale;
             
             // Convert to screen coordinates (radar is a circle with radius = radarRadius)
-            const screenX = radarRadius * (1 + relX);
+            // FIX: Remove the inversion of the X axis by removing the "1 +" part
+            const screenX = radarRadius * (1 - relX); // Changed from (1 + relX) to (1 - relX)
             const screenZ = radarRadius * (1 - relZ); // Invert Z axis to match game coordinates
             
             // Update plane element position
@@ -1225,7 +1226,8 @@
             // Adjust rotation to make the triangle point in the direction of travel
             // The SVG triangle points up by default, so we need to rotate it 90 degrees
             // to match the game's coordinate system where 0 degrees is north
-            const rotationDeg = (headingRad * 180) / Math.PI + 180;
+            // Since we flipped the x-axis, we need to adjust the rotation
+            const rotationDeg = (180 - plane.heading) % 360; // Simpler approach: mirror the angle around the vertical axis
             
             // Get the SVG element and rotate it
             const svg = plane.element.querySelector('.plane-icon');
@@ -1239,7 +1241,7 @@
                     const trailRelX = (trail.x - radarCenter.x) / scale;
                     const trailRelZ = (trail.z - radarCenter.z) / scale;
                     
-                    const trailScreenX = radarRadius * (1 + trailRelX);
+                    const trailScreenX = radarRadius * (1 - trailRelX); // Changed from (1 + trailRelX) to (1 - trailRelX)
                     const trailScreenZ = radarRadius * (1 - trailRelZ);
                     
                     trail.element.style.left = `${trailScreenX}px`;
@@ -1652,7 +1654,7 @@
             const gameUnitDeltaZ = (deltaY / radarRadius) * scale;
             
             // Update radar center (invert Z axis)
-            radarCenter.x = dragStartCenterX - gameUnitDeltaX;
+            radarCenter.x = dragStartCenterX + gameUnitDeltaX; // Changed from - to + to match the new orientation
             radarCenter.z = dragStartCenterZ + gameUnitDeltaZ;
             
             // Update all plane positions
