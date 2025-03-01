@@ -503,6 +503,64 @@
             margin-left: 8px;
         }
         
+        /* Responsive design for smaller screens */
+        @media (max-width: 1300px) {
+            #altitude-legend {
+                display: none;
+            }
+            
+            #controls {
+                flex-wrap: wrap;
+                max-width: 90%;
+            }
+            
+            button {
+                margin: 3px;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            #info-panel {
+                top: auto;
+                bottom: 0;
+                right: 0;
+                left: 0;
+                width: calc(100% - 65px);
+                border-radius: 0;
+                border-width: 1px 0 0 0;
+                margin: 20px;
+            }
+            
+            #controls {
+                bottom: 270px;
+            }
+            
+            #scale-indicator {
+                bottom: 160px;
+            }
+            
+            #title-bar {
+                width: calc(100% - 60px);
+            }
+        }
+        
+        @media (max-width: 500px) {
+            /* Hide less essential buttons on very small screens */
+            #center-runway, #center-carrier, #toggle-trails {
+                display: none;
+            }
+            
+            #controls {
+                padding: 5px;
+            }
+            
+            button {
+                margin: 2px;
+                padding: 4px 8px;
+                font-size: 12px;
+            }
+        }
+        
         .centering-effect {
             position: absolute;
             width: 40px;
@@ -798,6 +856,9 @@
             } else {
                 planeListContainer.style.display = 'none';
             }
+            
+            // No need to manually handle altitude legend and controls here
+            // as they're controlled by CSS media queries
         }
         
         // Call on load and on resize
