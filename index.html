@@ -547,30 +547,6 @@
             <span class="clickable-text" id="dan-perks-link">Dan Perks</span>
         </div>
         
-        <!-- Add captcha verification screen -->
-        <div id="captcha-screen" style="position: absolute; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; background-color: rgba(0,0,0,0.8); color: white; font-family: system-ui, sans-serif; z-index: 1000;">
-            <h1 style="font-size: 36px; margin-bottom: 0; padding: 14px; text-align: center;">✈️ ATC Visualizer</h1>
-            <p style="margin-top: 10px; margin-bottom: 20px;">
-                Please complete the verification to continue
-            </p>
-            <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onloadTurnstileCallback" defer></script>
-            <script>
-                var cloudflareCaptchaResponse;
-                window.onloadTurnstileCallback = function () {
-                    turnstile.render('#cloudflare-captcha', {
-                        sitekey: "0x4AAAAAAA_Et20He4UMsyH5",
-                        callback: function(response) {
-                            document.getElementById('cloudflare-captcha').remove();
-                            cloudflareCaptchaResponse = response;
-                            document.getElementById('start-button').disabled = false;
-                        },
-                    });
-                };
-            </script>
-            <div id="cloudflare-captcha"></div>
-            <button id="start-button" style="margin-top: 20px; font-weight: bold; padding: 10px 55px; font-size: 24px; cursor: pointer; background-color: #4CAF50; color: white; border: none; border-radius: 5px;" disabled>Start Visualizer</button>
-        </div>
-        
         <div id="radar">
             <div class="radar-sweep"></div>
             <!-- Radar circles will be added dynamically -->
@@ -680,68 +656,14 @@
         ];
 
         // Add after other global variables
-        let selfUsername;
-        let selfPlaneId;
+        let selfUsername = 'ATC Viewer';
+        let selfPlaneId = generatePlaneId();
 
         // Connect to WebSocket server on page load
         document.getElementById('launch-button').addEventListener('click', function() {
             // Open fly.html directly
             window.open('https://fly.pieter.com', '_blank');
         });
-        
-        // Add event listener for the start button
-        document.getElementById('start-button').addEventListener('click', function() {
-            startVisualizerWithVerification();
-        });
-        
-        // Function to start the visualizer after verification
-        function startVisualizerWithVerification() {
-            // Check if the captcha has been completed
-            if (!cloudflareCaptchaResponse) {
-                // Alert the user
-                alert("Please complete the captcha verification before continuing.");
-                return;
-            }
-            
-            // Set a fixed username for the ATC Viewer
-            selfUsername = 'ATC Viewer';
-            
-            // Generate a plane ID
-            selfPlaneId = generatePlaneId();
-            
-            // Send AJAX request to verify captcha and get token
-            fetch('https://fly.pieter.com/fly_captcha.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: new URLSearchParams({
-                    'username': selfUsername,
-                    'planeId': selfPlaneId,
-                    'cloudflareCaptchaResponse': cloudflareCaptchaResponse
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (!data.success) {
-                    alert(data.message || "Verification failed. Please try again.");
-                    return;
-                }
-                
-                // Store the verification token
-                verifyToken = data.verifyToken;
-                
-                // Hide the captcha screen
-                document.getElementById('captcha-screen').style.display = 'none';
-                
-                // Connect to the WebSocket server
-                connectWebSocket();
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('An error occurred during verification. Please try again.');
-            });
-        }
         
         // Configuration
         const WS_SERVER = 'wss://fly.pieter.com:8080';
@@ -896,34 +818,16 @@
                     connectionStatus.style.color = '#00ff00';
                     connectionStatusValue.style.color = '#00ff00';
                     
-                    // Use the already generated plane ID
-                    ourPlaneId = selfPlaneId;
-                    
-                    // Send a dummy position to initialize the connection
-                    const initialPosition = {
-                        x: Math.round(0 * 100) / 100,
-                        y: Math.round(36 * 100) / 100,
-                        z: Math.round(0 * 100) / 100,
-                        rotationX: Math.round(0 * 100) / 100,
-                        rotationY: Math.round(0 * 100) / 100,
-                        rotationZ: Math.round(0 * 100) / 100,
-                        speed: Math.round(0 * 100) / 100,
-                        heading: Math.round(0 * 100) / 100,
-                        verticalSpeed: Math.round(0 * 100) / 100,
-                        timestamp: Date.now()
-                    };
-                    
+                    // Connect as an observer instead of simulating a plane
                     const message = {
-                        type: 'position',
-                        planeId: ourPlaneId,
-                        data: initialPosition,
-                        username: selfUsername,
-                        verifyToken: verifyToken
+                        type: 'observer',
+                        secret: 'radar_screen_secret_key'
                     };
                     
-                    console.log('Sending initial handshake:', message);
+                    console.log('Sending observer connection:', message);
                     socket.send(JSON.stringify(message));
                     
+                    // No need to send heartbeats as an observer
                     // Reset lastHeartbeatTime
                     lastHeartbeatTime = Date.now();
                 };
@@ -1668,6 +1572,10 @@
         
         // Send heartbeat to keep the connection alive
         function sendHeartbeat() {
+            // No need to send heartbeats when connected as an observer
+            return;
+            
+            /*
             if (!socket || socket.readyState !== WebSocket.OPEN || !ourPlaneId) {
                 return;
             }
@@ -1693,16 +1601,12 @@
                 username: 'ATC Viewer' // Fixed username instead of from localStorage
             };
             
-            // We no longer need to generate a validation hash
-            // const v = gv(positionData, ourSecretKey);
-            
             const message = {
                 type: 'position',
                 planeId: ourPlaneId,
                 data: positionData,
                 username: 'ATC Viewer',
                 verifyToken: verifyToken
-                // v: v - removed
             };
             
             // Log heartbeat occasionally (only once every ~5 minutes)
@@ -1716,6 +1620,7 @@
             } catch (err) {
                 console.error('❌ Failed to send heartbeat:', err);
             }
+            */
         }
         
         // Periodically update all plane positions and opacities
@@ -1774,8 +1679,8 @@
                 })
             })
             
-            // Don't automatically connect - wait for captcha verification
-            // connectWebSocket();
+            // Connect to WebSocket server immediately
+            connectWebSocket();
             
             // Set initial button text for toggle-landed
             document.getElementById('toggle-landed').textContent = showLanded ? 'Hide Landed' : 'Show Landed';
