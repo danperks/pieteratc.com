@@ -529,6 +529,45 @@
                 border-width: 1px;
             }
         }
+        
+        /* Runway and carrier styles */
+        .runway {
+            position: absolute;
+            width: 20px;
+            height: 200px;
+            background-color: rgba(0, 255, 0, 0.3);
+            border: 1px solid rgba(0, 255, 0, 0.7);
+            transform: translate(-50%, -50%);
+            z-index: 5;
+        }
+        
+        .runway-label {
+            position: absolute;
+            color: rgba(0, 255, 0, 0.7);
+            font-size: 12px;
+            white-space: nowrap;
+            transform: translate(-50%, -100%);
+            text-align: center;
+        }
+        
+        .carrier {
+            position: absolute;
+            width: 40px;
+            height: 120px;
+            background-color: rgba(0, 255, 255, 0.3);
+            border: 1px solid rgba(0, 255, 255, 0.7);
+            transform: translate(-50%, -50%);
+            z-index: 5;
+        }
+        
+        .carrier-label {
+            position: absolute;
+            color: rgba(0, 255, 255, 0.7);
+            font-size: 12px;
+            white-space: nowrap;
+            transform: translate(-50%, -100%);
+            text-align: center;
+        }
     </style>
 </head>
 <body>
@@ -554,6 +593,12 @@
             <div class="coordinate-axis x-axis"></div>
             <div class="coordinate-axis z-axis"></div>
             <div id="scale-indicator">Scale: <span id="scale-value">1000</span> units</div>
+            <div id="runway" class="runway">
+                <div class="runway-label">Runway</div>
+            </div>
+            <div id="carrier" class="carrier">
+                <div class="carrier-label">Carrier</div>
+            </div>
         </div>
         
         <div id="connection-status">Status: Connecting...</div>
@@ -625,6 +670,8 @@
             <button id="zoom-in" class="control-button">+</button>
             <button id="zoom-out" class="control-button">-</button>
             <button id="center-view">Center</button>
+            <button id="center-runway">Runway</button>
+            <button id="center-carrier">Carrier</button>
             <button id="deselect-plane" disabled>Deselect</button>
             <button id="toggle-trails">Trails</button>
             <button id="toggle-landed">Show Landed</button>
@@ -718,6 +765,17 @@
         const LANDED_ALTITUDE_THRESHOLD = 30; // Planes below this altitude (in feet) are considered landed
         const PLANE_LIST_UPDATE_INTERVAL = 1000; // Update plane list once per second
         
+        // Runway and carrier coordinates from fly.html
+        const RUNWAY_X = 0;
+        const RUNWAY_Z = 90;
+        const RUNWAY_LENGTH = 200;
+        const RUNWAY_WIDTH = 20;
+        
+        const CARRIER_X = -600;
+        const CARRIER_Z = 70;
+        const CARRIER_LENGTH = 120;
+        const CARRIER_WIDTH = 40;
+        
         // DOM elements
         const radar = document.getElementById('radar');
         const connectionStatus = document.getElementById('connection-status');
@@ -800,6 +858,60 @@
         
         // Initialize radar circles
         createRadarCircles();
+        
+        // Update runway and carrier positions
+        function updateLandingZones() {
+            const runway = document.getElementById('runway');
+            const carrier = document.getElementById('carrier');
+            
+            const radarRect = radar.getBoundingClientRect();
+            const radarRadius = radarRect.width / 2;
+            
+            // Calculate runway position relative to radar center and scale
+            const runwayRelX = (RUNWAY_X - radarCenter.x) / scale;
+            const runwayRelZ = (RUNWAY_Z - radarCenter.z) / scale;
+            
+            // Convert to screen coordinates
+            const runwayScreenX = radarRadius * (1 + runwayRelX);
+            const runwayScreenZ = radarRadius * (1 - runwayRelZ); // Invert Z axis
+            
+            // Update runway position
+            runway.style.left = `${runwayScreenX}px`;
+            runway.style.top = `${runwayScreenZ}px`;
+            
+            // Scale runway size based on radar scale
+            const runwayScreenLength = (RUNWAY_LENGTH / scale) * radarRadius;
+            const runwayScreenWidth = (RUNWAY_WIDTH / scale) * radarRadius;
+            
+            runway.style.height = `${runwayScreenLength}px`;
+            runway.style.width = `${runwayScreenWidth}px`;
+            
+            // Calculate carrier position
+            const carrierRelX = (CARRIER_X - radarCenter.x) / scale;
+            const carrierRelZ = (CARRIER_Z - radarCenter.z) / scale;
+            
+            // Convert to screen coordinates
+            const carrierScreenX = radarRadius * (1 + carrierRelX);
+            const carrierScreenZ = radarRadius * (1 - carrierRelZ); // Invert Z axis
+            
+            // Update carrier position
+            carrier.style.left = `${carrierScreenX}px`;
+            carrier.style.top = `${carrierScreenZ}px`;
+            
+            // Scale carrier size based on radar scale
+            const carrierScreenLength = (CARRIER_LENGTH / scale) * radarRadius;
+            const carrierScreenWidth = (CARRIER_WIDTH / scale) * radarRadius;
+            
+            carrier.style.height = `${carrierScreenLength}px`;
+            carrier.style.width = `${carrierScreenWidth}px`;
+            
+            // Hide runway and carrier if they're outside the radar view
+            runway.style.display = (Math.abs(runwayRelX) > 1 || Math.abs(runwayRelZ) > 1) ? 'none' : 'block';
+            carrier.style.display = (Math.abs(carrierRelX) > 1 || Math.abs(carrierRelZ) > 1) ? 'none' : 'block';
+        }
+        
+        // Call updateLandingZones initially
+        updateLandingZones();
         
         // Connect to WebSocket server
         function connectWebSocket() {
@@ -1369,6 +1481,9 @@
             planes.forEach(plane => {
                 updatePlanePosition(plane);
             });
+            
+            // Also update runway and carrier positions
+            updateLandingZones();
         }
         
         // Zoom in button
@@ -1397,6 +1512,58 @@
                 radarCenter = { x: 0, z: 0 };
                 updateAllPlanePositions();
             }
+        });
+        
+        // Center on runway button
+        document.getElementById('center-runway').addEventListener('click', () => {
+            radarCenter = { x: RUNWAY_X, z: RUNWAY_Z };
+            updateAllPlanePositions();
+            
+            // Add visual feedback
+            const effect = document.createElement('div');
+            effect.className = 'centering-effect';
+            radar.appendChild(effect);
+            
+            // Position the effect at the runway position
+            const radarRect = radar.getBoundingClientRect();
+            const radarRadius = radarRect.width / 2;
+            const runwayScreenX = radarRadius;
+            const runwayScreenZ = radarRadius;
+            effect.style.left = `${runwayScreenX}px`;
+            effect.style.top = `${runwayScreenZ}px`;
+            
+            // Remove the effect after animation completes
+            setTimeout(() => {
+                if (effect.parentNode) {
+                    effect.parentNode.removeChild(effect);
+                }
+            }, 1000);
+        });
+        
+        // Center on carrier button
+        document.getElementById('center-carrier').addEventListener('click', () => {
+            radarCenter = { x: CARRIER_X, z: CARRIER_Z };
+            updateAllPlanePositions();
+            
+            // Add visual feedback
+            const effect = document.createElement('div');
+            effect.className = 'centering-effect';
+            radar.appendChild(effect);
+            
+            // Position the effect at the carrier position
+            const radarRect = radar.getBoundingClientRect();
+            const radarRadius = radarRect.width / 2;
+            const carrierScreenX = radarRadius;
+            const carrierScreenZ = radarRadius;
+            effect.style.left = `${carrierScreenX}px`;
+            effect.style.top = `${carrierScreenZ}px`;
+            
+            // Remove the effect after animation completes
+            setTimeout(() => {
+                if (effect.parentNode) {
+                    effect.parentNode.removeChild(effect);
+                }
+            }, 1000);
         });
         
         // Deselect plane button
