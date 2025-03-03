@@ -231,6 +231,15 @@
             border-radius: 50%;
         }
         
+        /* New trail line style */
+        .trail-line {
+            position: absolute;
+            height: 1px;
+            background-color: rgba(0, 255, 0, 0.4);
+            transform-origin: left center;
+            z-index: 5;
+        }
+        
         #info-panel {
             position: absolute;
             top: 20px;
@@ -546,12 +555,8 @@
         
         @media (max-width: 500px) {
             /* Hide less essential buttons on very small screens */
-            #center-runway, #center-carrier, #toggle-trails {
+            #controls, #center-runway, #center-carrier, #toggle-trails {
                 display: none;
-            }
-            
-            #controls {
-                padding: 5px;
             }
             
             button {
@@ -626,6 +631,92 @@
             transform: translate(-50%, -100%);
             text-align: center;
         }
+        
+        #help-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        #help-content {
+            background-color: #222;
+            border: 1px solid #444;
+            border-radius: 5px;
+            padding: 20px;
+            max-width: 400px;
+            color: #fff;
+        }
+        
+        #help-content h2 {
+            margin-top: 0;
+            color: #0f0;
+        }
+        
+        #help-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        
+        #help-content td {
+            padding: 8px;
+            border-bottom: 1px solid #444;
+        }
+        
+        #help-content td:first-child {
+            width: 80px;
+            text-align: center;
+        }
+        
+        kbd {
+            background-color: #333;
+            border: 1px solid #555;
+            border-radius: 3px;
+            box-shadow: 0 1px 0 rgba(255,255,255,0.2);
+            color: #fff;
+            display: inline-block;
+            font-size: 0.85em;
+            padding: 2px 6px;
+        }
+        
+        #close-help {
+            background-color: #333;
+            border: 1px solid #555;
+            color: #fff;
+            padding: 5px 15px;
+            border-radius: 3px;
+            cursor: pointer;
+            display: block;
+            margin: 0 auto;
+        }
+        
+        #close-help:hover {
+            background-color: #444;
+        }
+        
+        #show-help {
+            background-color: #333;
+            color: #fff;
+        }
+        
+        .notification {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            z-index: 1000;
+        }
     </style>
 </head>
 <body>
@@ -699,6 +790,16 @@
             </div>
         </div>
         
+        <div id="controls">
+            <button id="zoom-in" class="control-button">+</button>
+            <button id="zoom-out" class="control-button">-</button>
+            <button id="center-view">Center</button>
+            <button id="center-runway">Runway</button>
+            <button id="center-carrier">Carrier</button>
+            <button id="deselect-plane" disabled>Deselect</button>
+            <button id="toggle-landed">Show Landed</button>
+        </div>
+        
         <div id="plane-list-container">
             <div class="plane-list-header">Active Planes (Oldest First)</div>
             <div id="plane-list"></div>
@@ -722,17 +823,6 @@
                 <div class="legend-color altitude-very-high"></div>
                 <div class="legend-label">&gt; 20,000 ft</div>
             </div>
-        </div>
-        
-        <div id="controls">
-            <button id="zoom-in" class="control-button">+</button>
-            <button id="zoom-out" class="control-button">-</button>
-            <button id="center-view">Center</button>
-            <button id="center-runway">Runway</button>
-            <button id="center-carrier">Carrier</button>
-            <button id="deselect-plane" disabled>Deselect</button>
-            <button id="toggle-trails">Trails</button>
-            <button id="toggle-landed">Show Landed</button>
         </div>
     </div>
     
@@ -774,7 +864,7 @@
         const WS_SERVER = 'wss://fly.pieter.com:8080';
         const MAX_PLANES = 100;
         const TRAIL_LENGTH = 20;
-        const TRAIL_INTERVAL = 2000; // ms between trail points
+        const TRAIL_INTERVAL = 1000; // Reduced from 2000ms to 1000ms for more frequent trail points
         const S = '7sw3hs9rmrmcq113'; // Server secret (must match the server's secret)
         const MAX_RECONNECT_ATTEMPTS = 10; // Maximum number of reconnection attempts
         
@@ -809,6 +899,7 @@
         let scale = 1000; // Initial scale (radar radius in game units)
         let showTrails = true;
         let showLanded = false; // Default to hiding landed planes
+        let autoCenter = true; // Auto-center on selected plane
         let radarCenter = { x: 0, z: 0 }; // Center of the radar view in game coordinates
         let lastUpdateTime = Date.now(); // Track last update time for auto-reconnect
         let lastHeartbeatTime = 0; // Track last heartbeat time
@@ -1182,6 +1273,11 @@
             // Update selected plane info if this is the selected plane
             if (selectedPlaneId === plane.id) {
                 updateSelectedPlaneInfo();
+                
+                // Keep selected plane centered as it moves if auto-center is enabled
+                if (autoCenter) {
+                    centerOnPlane(selectedPlaneId, false); // Don't show centering effect during auto-centering
+                }
             }
         }
         
@@ -1298,6 +1394,9 @@
             
             // Update trail positions
             if (showTrails) {
+                // Only show trails for the selected plane if one is selected
+                const shouldShowTrails = !selectedPlaneId || selectedPlaneId === plane.id;
+                
                 plane.trails.forEach((trail, index) => {
                     const trailRelX = (trail.x - radarCenter.x) / scale;
                     const trailRelZ = (trail.z - radarCenter.z) / scale;
@@ -1308,9 +1407,38 @@
                     trail.element.style.left = `${trailScreenX}px`;
                     trail.element.style.top = `${trailScreenZ}px`;
                     
+                    // Show/hide based on whether this is the selected plane
+                    trail.element.style.display = shouldShowTrails ? 'block' : 'none';
+                    
                     // Fade out older trails
                     const opacity = 0.5 * (1 - index / TRAIL_LENGTH);
                     trail.element.style.opacity = opacity;
+                    
+                    // Update line segment connecting to next point
+                    if (index < plane.trails.length - 1 && trail.lineElement) {
+                        const nextTrail = plane.trails[index + 1];
+                        const nextTrailRelX = (nextTrail.x - radarCenter.x) / scale;
+                        const nextTrailRelZ = (nextTrail.z - radarCenter.z) / scale;
+                        
+                        const nextTrailScreenX = radarRadius * (1 - nextTrailRelX);
+                        const nextTrailScreenZ = radarRadius * (1 - nextTrailRelZ);
+                        
+                        // Calculate distance and angle between points
+                        const dx = nextTrailScreenX - trailScreenX;
+                        const dy = nextTrailScreenZ - trailScreenZ;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+                        
+                        // Position and rotate the line
+                        trail.lineElement.style.left = `${trailScreenX}px`;
+                        trail.lineElement.style.top = `${trailScreenZ}px`;
+                        trail.lineElement.style.width = `${distance}px`;
+                        trail.lineElement.style.transform = `rotate(${angle}deg)`;
+                        trail.lineElement.style.opacity = opacity;
+                        
+                        // Show/hide based on whether this is the selected plane
+                        trail.lineElement.style.display = shouldShowTrails ? 'block' : 'none';
+                    }
                 });
             }
         }
@@ -1331,7 +1459,9 @@
                 x: plane.position.x,
                 y: plane.position.y,
                 z: plane.position.z,
-                element: document.createElement('div')
+                element: document.createElement('div'),
+                lineElement: null,
+                time: Date.now()
             };
             
             trailPoint.element.className = 'plane-trail';
@@ -1340,24 +1470,46 @@
             // Add to beginning of array
             plane.trails.unshift(trailPoint);
             
+            // Create line segment between this point and the previous point if it exists
+            if (plane.trails.length > 1) {
+                const prevPoint = plane.trails[1];
+                const lineElement = document.createElement('div');
+                lineElement.className = 'trail-line';
+                radar.appendChild(lineElement);
+                
+                // Store the line element with the current point
+                trailPoint.lineElement = lineElement;
+            }
+            
             // Limit trail length
             if (plane.trails.length > TRAIL_LENGTH) {
                 const removedTrail = plane.trails.pop();
                 if (removedTrail.element.parentNode) {
                     removedTrail.element.parentNode.removeChild(removedTrail.element);
                 }
+                if (removedTrail.lineElement && removedTrail.lineElement.parentNode) {
+                    removedTrail.lineElement.parentNode.removeChild(removedTrail.lineElement);
+                }
             }
         }
         
         // Center on a specific plane
-        function centerOnPlane(planeId) {
+        function centerOnPlane(planeId, showEffect = true) {
             const plane = planes.get(planeId);
             if (plane) {
                 radarCenter.x = plane.position.x;
                 radarCenter.z = plane.position.z;
                 
-                // Add visual feedback
-                addCenteringEffect(plane.position.x, plane.position.z);
+                // Add visual feedback only when requested (e.g., when clicked, not during auto-centering)
+                if (showEffect) {
+                    addCenteringEffect(plane.position.x, plane.position.z);
+                }
+                
+                // Toggle visibility of the radar center dot
+                const radarCenterDot = document.querySelector('.radar-center');
+                if (radarCenterDot) {
+                    radarCenterDot.style.display = 'none'; // Hide the center dot when a plane is centered
+                }
                 
                 updateAllPlanePositions();
             }
@@ -1401,6 +1553,9 @@
             
             // Update selected plane info
             updateSelectedPlaneInfo();
+            
+            // Update all plane positions to refresh trail visibility
+            updateAllPlanePositions();
         }
         
         // Add a visual feedback effect when centering on a plane
@@ -1472,6 +1627,45 @@
                 
                 // Only count planes that have moved as active
                 if (plane.hasMoved) {
+                    // Check if the plane is hidden (below altitude threshold)
+                    const altitude = plane.position.y - 35.2;
+                    const isHidden = altitude < LANDED_ALTITUDE_THRESHOLD && !showLanded;
+                    
+                    // If the plane is hidden and hasn't been updated for 15 seconds, remove it
+                    if (isHidden && timeSinceUpdate > 15000) {
+                        // Remove plane element if it exists
+                        if (plane.element && plane.element.parentNode) {
+                            plane.element.parentNode.removeChild(plane.element);
+                        }
+                        
+                        // Remove trail elements
+                        plane.trails.forEach(trail => {
+                            if (trail.element.parentNode) {
+                                trail.element.parentNode.removeChild(trail.element);
+                            }
+                            if (trail.lineElement && trail.lineElement.parentNode) {
+                                trail.lineElement.parentNode.removeChild(trail.lineElement);
+                            }
+                        });
+                        
+                        // Remove from planes map
+                        planes.delete(plane.id);
+                        
+                        // Remove from plane list
+                        const listItem = document.getElementById(`plane-list-item-${plane.id}`);
+                        if (listItem) {
+                            listItem.remove();
+                        }
+                        
+                        // If this was the selected plane, clear selection
+                        if (selectedPlaneId === plane.id) {
+                            selectedPlaneId = null;
+                            updateSelectedPlaneInfo();
+                        }
+                        
+                        return; // Skip the rest of the processing for this plane
+                    }
+                    
                     // Consider planes active if they've been updated recently
                     if (timeSinceUpdate < PLANE_FADE_START) {
                         activeCount++;
@@ -1487,6 +1681,9 @@
                         plane.trails.forEach(trail => {
                             if (trail.element.parentNode) {
                                 trail.element.parentNode.removeChild(trail.element);
+                            }
+                            if (trail.lineElement && trail.lineElement.parentNode) {
+                                trail.lineElement.parentNode.removeChild(trail.lineElement);
                             }
                         });
                         
@@ -1521,6 +1718,9 @@
                         plane.trails.forEach(trail => {
                             if (trail.element.parentNode) {
                                 trail.element.parentNode.removeChild(trail.element);
+                            }
+                            if (trail.lineElement && trail.lineElement.parentNode) {
+                                trail.lineElement.parentNode.removeChild(trail.lineElement);
                             }
                         });
                         
@@ -1573,6 +1773,13 @@
             } else {
                 // If no plane is selected, center the map
                 radarCenter = { x: 0, z: 0 };
+                
+                // Show the radar center dot again
+                const radarCenterDot = document.querySelector('.radar-center');
+                if (radarCenterDot) {
+                    radarCenterDot.style.display = 'block';
+                }
+                
                 updateAllPlanePositions();
             }
         });
@@ -1581,6 +1788,12 @@
         document.getElementById('center-runway').addEventListener('click', () => {
             radarCenter = { x: RUNWAY_X, z: RUNWAY_Z };
             updateAllPlanePositions();
+            
+            // Show the radar center dot again
+            const radarCenterDot = document.querySelector('.radar-center');
+            if (radarCenterDot) {
+                radarCenterDot.style.display = 'block';
+            }
             
             // Add visual feedback
             const effect = document.createElement('div');
@@ -1608,6 +1821,12 @@
             radarCenter = { x: CARRIER_X, z: CARRIER_Z };
             updateAllPlanePositions();
             
+            // Show the radar center dot again
+            const radarCenterDot = document.querySelector('.radar-center');
+            if (radarCenterDot) {
+                radarCenterDot.style.display = 'block';
+            }
+            
             // Add visual feedback
             const effect = document.createElement('div');
             effect.className = 'centering-effect';
@@ -1629,6 +1848,58 @@
             }, 1000);
         });
         
+        // Select None button
+        // document.getElementById('select-none').addEventListener('click', () => {
+        //     // Deselect the currently selected plane if any
+        //     if (selectedPlaneId) {
+        //         // Deselect the currently selected plane
+        //         const plane = planes.get(selectedPlaneId);
+        //         if (plane && plane.element) {
+        //             plane.element.style.border = 'none';
+        //         }
+        //         
+        //         // Remove selected class from list item
+        //         const listItem = document.getElementById(`plane-list-item-${selectedPlaneId}`);
+        //         if (listItem) {
+        //             listItem.classList.remove('selected');
+        //         }
+        //         
+        //         // Clear selection
+        //         selectedPlaneId = null;
+        //         updateSelectedPlaneInfo();
+        //     }
+        //     
+        //     // Center the view on the map origin (0,0)
+        //     radarCenter = { x: 0, z: 0 };
+        //     
+        //     // Show the radar center dot
+        //     const radarCenterDot = document.querySelector('.radar-center');
+        //     if (radarCenterDot) {
+        //         radarCenterDot.style.display = 'block';
+        //     }
+        //     
+        //     // Update all plane positions to refresh trail visibility
+        //     updateAllPlanePositions();
+        //     
+        //     // Add visual feedback
+        //     const effect = document.createElement('div');
+        //     effect.className = 'centering-effect';
+        //     radar.appendChild(effect);
+        //     
+        //     // Position the effect at the center of the radar
+        //     const radarRect = radar.getBoundingClientRect();
+        //     const radarRadius = radarRect.width / 2;
+        //     effect.style.left = `${radarRadius}px`;
+        //     effect.style.top = `${radarRadius}px`;
+        //     
+        //     // Remove the effect after animation completes
+        //     setTimeout(() => {
+        //         if (effect.parentNode) {
+        //             effect.parentNode.removeChild(effect);
+        //         }
+        //     }, 1000);
+        // });
+        
         // Deselect plane button
         document.getElementById('deselect-plane').addEventListener('click', () => {
             if (selectedPlaneId) {
@@ -1644,23 +1915,37 @@
                     listItem.classList.remove('selected');
                 }
                 
+                // Show the radar center dot again
+                const radarCenterDot = document.querySelector('.radar-center');
+                if (radarCenterDot) {
+                    radarCenterDot.style.display = 'block';
+                }
+                
                 // Clear selection
                 selectedPlaneId = null;
                 updateSelectedPlaneInfo();
+                
+                // Update all plane positions to refresh trail visibility
+                updateAllPlanePositions();
             }
         });
         
         // Toggle trails button
-        document.getElementById('toggle-trails').addEventListener('click', () => {
-            showTrails = !showTrails;
-            
-            // Show/hide existing trails
-            planes.forEach(plane => {
-                plane.trails.forEach(trail => {
-                    trail.element.style.display = showTrails ? 'block' : 'none';
-                });
-            });
-        });
+        // document.getElementById('toggle-trails').addEventListener('click', () => {
+        //     showTrails = !showTrails;
+        //     
+        //     // Show/hide existing trails based on showTrails and selectedPlaneId
+        //     planes.forEach(plane => {
+        //         const shouldShowTrails = showTrails && (!selectedPlaneId || selectedPlaneId === plane.id);
+        //         
+        //         plane.trails.forEach(trail => {
+        //             trail.element.style.display = shouldShowTrails ? 'block' : 'none';
+        //             if (trail.lineElement) {
+        //                 trail.lineElement.style.display = shouldShowTrails ? 'block' : 'none';
+        //             }
+        //         });
+        //     });
+        // });
         
         // Toggle landed button
         document.getElementById('toggle-landed').addEventListener('click', () => {
@@ -1675,6 +1960,20 @@
             updatePlaneList();
         });
         
+        // Toggle auto-center button
+        // document.getElementById('toggle-auto-center').addEventListener('click', () => {
+        //     autoCenter = !autoCenter;
+        //     document.getElementById('toggle-auto-center').textContent = autoCenter ? 'Auto-Center: ON' : 'Auto-Center: OFF';
+        //     
+        //     // If auto-center is enabled and a plane is selected, center on it immediately
+        //     if (autoCenter && selectedPlaneId) {
+        //         centerOnPlane(selectedPlaneId, false); // Don't show centering effect when toggling auto-center
+        //     }
+        // });
+        
+        // Set initial button text for toggle-auto-center
+        // document.getElementById('toggle-auto-center').textContent = autoCenter ? 'Auto-Center: ON' : 'Auto-Center: OFF';
+        
         // Update radar circles when scale changes
         function updateRadarCircles() {
             // Remove existing circles and labels
@@ -1685,6 +1984,51 @@
             createRadarCircles();
         }
         
+        // Function to check if selected plane is far from center and deselect if needed
+        function checkAndDeselectPlane() {
+            if (selectedPlaneId) {
+                const plane = planes.get(selectedPlaneId);
+                if (plane) {
+                    // Calculate distance between plane position and radar center
+                    const dx = plane.position.x - radarCenter.x;
+                    const dz = plane.position.z - radarCenter.z;
+                    
+                    // Calculate distance as a percentage of the radar radius
+                    const distancePercentage = Math.sqrt(dx*dx + dz*dz) / scale;
+                    
+                    // If the plane is more than 30% away from the center, deselect it
+                    if (distancePercentage > 0.3) {
+                        // Deselect the plane
+                        if (plane.element) {
+                            plane.element.style.border = 'none';
+                        }
+                        
+                        // Remove selected class from list item
+                        const listItem = document.getElementById(`plane-list-item-${selectedPlaneId}`);
+                        if (listItem) {
+                            listItem.classList.remove('selected');
+                        }
+                        
+                        // Show the radar center dot again
+                        const radarCenterDot = document.querySelector('.radar-center');
+                        if (radarCenterDot) {
+                            radarCenterDot.style.display = 'block';
+                        }
+                        
+                        // Clear selection
+                        selectedPlaneId = null;
+                        updateSelectedPlaneInfo();
+                        
+                        // Update all plane positions to refresh trail visibility
+                        updateAllPlanePositions();
+                        
+                        return true; // Plane was deselected
+                    }
+                }
+            }
+            return false; // No deselection occurred
+        }
+
         // Drag functionality for panning the radar view
         let isDragging = false;
         let dragStartX = 0;
@@ -1720,6 +2064,9 @@
             
             // Update all plane positions
             updateAllPlanePositions();
+            
+            // Check if selected plane is far from center and deselect if needed
+            checkAndDeselectPlane();
         });
         
         document.addEventListener('mouseup', () => {
@@ -1742,6 +2089,9 @@
             scaleValue.textContent = Math.round(scale);
             updateRadarCircles();
             updateAllPlanePositions();
+            
+            // Check if selected plane is far from center and deselect if needed
+            checkAndDeselectPlane();
         });
         
         // Periodically check for inactive planes
@@ -1875,10 +2225,10 @@
                     // Calculate fade progress (0 to 1)
                     const fadeProgress = Math.min(1, (timeSinceUpdate - PLANE_FADE_START) / PLANE_FADE_DURATION);
                     opacity = 1.0 - fadeProgress;
-                    
-                    // Apply opacity to plane element
-                    plane.element.style.opacity = opacity;
                 }
+                
+                // Apply opacity to plane element
+                plane.element.style.opacity = opacity;
             });
             
             // Request next frame
@@ -1890,13 +2240,6 @@
         
         // Connect to WebSocket server on page load
         window.addEventListener('load', () => {
-            // Add beforeunload event handler for reload warning
-            window.addEventListener('beforeunload', (e) => {
-                e.preventDefault();
-                e.returnValue = 'The multiplayer server only allows one connection at a time, so it may take a few seconds to reconnect if you reload the page! Are you sure you want to continue?';
-                return e.returnValue;
-            });
-
             // Make a POST request to the hit counter API
             // Nothing neferious, just to see how it's doing!
             fetch('https://danperks.dev/api/hits/atc', {
@@ -1914,6 +2257,9 @@
             
             // Set initial button text for toggle-landed
             document.getElementById('toggle-landed').textContent = showLanded ? 'Hide Landed' : 'Show Landed';
+            
+            // Set initial button text for toggle-auto-center
+            document.getElementById('toggle-auto-center').textContent = autoCenter ? 'Auto-Center: ON' : 'Auto-Center: OFF';
             
             // Check if screen is wide enough for plane list
             checkScreenWidth();
@@ -1955,10 +2301,7 @@
                     // Only show planes that have moved
                     if (!plane.hasMoved) return false;
                     
-                    // Hide planes below altitude threshold unless showLanded is true
-                    const altitude = plane.position.y - 35.2;
-                    if (altitude < LANDED_ALTITUDE_THRESHOLD && !showLanded) return false;
-                    
+                    // We now show all planes that have moved, regardless of altitude
                     return true;
                 })
                 .sort((a, b) => a.creationTime - b.creationTime); // Sort by creation time, oldest first
@@ -1968,19 +2311,13 @@
                 updatePlaneListItem(plane, true); // Pass true to indicate this is a batch update
             });
             
-            // Remove list items for planes that should be hidden
+            // Remove list items for planes that haven't moved
             const listItems = planeList.querySelectorAll('.plane-list-item');
             listItems.forEach(item => {
                 const itemPlaneId = item.id.replace('plane-list-item-', '');
                 const plane = planes.get(itemPlaneId);
                 
                 if (!plane || !plane.hasMoved) {
-                    item.remove();
-                    return;
-                }
-                
-                const altitude = plane.position.y - 35.2;
-                if (altitude < LANDED_ALTITUDE_THRESHOLD && !showLanded) {
                     item.remove();
                 }
             });
@@ -2001,20 +2338,13 @@
                 lastPlaneListUpdate = now;
             }
             
-            // Check if the plane is below altitude threshold and should be hidden
-            const altitude = plane.position.y - 35.2;
-            if (altitude < LANDED_ALTITUDE_THRESHOLD && !showLanded) {
-                // Remove the list item if it exists
-                const existingItem = document.getElementById(`plane-list-item-${plane.id}`);
-                if (existingItem) {
-                    existingItem.remove();
-                }
-                return;
-            }
-            
             const planeId = plane.id;
             let listItem = document.getElementById(`plane-list-item-${planeId}`);
             const isNewItem = !listItem;
+            
+            // Check if the plane is below altitude threshold (will be marked as hidden)
+            const altitude = plane.position.y - 35.2;
+            const isHidden = altitude < LANDED_ALTITUDE_THRESHOLD && !showLanded;
             
             // If the plane doesn't have a list item yet, create one
             if (isNewItem) {
@@ -2024,11 +2354,12 @@
                 
                 // Censor plane ID if longer than 6 characters
                 const displayName = plane.username || 'Anonymous Pilot';
+                const hiddenIndicator = isHidden ? ' (hidden)' : '';
                 
                 listItem.innerHTML = `
                     <div class="plane-list-color"></div>
                     <div class="plane-list-info">
-                        <div class="plane-list-id">${displayName}</div>
+                        <div class="plane-list-id">${displayName}${hiddenIndicator}</div>
                         <div class="plane-list-time">0s</div>
                     </div>
                 `;
@@ -2059,6 +2390,12 @@
                 setTimeout(() => {
                     listItem.classList.remove('new-plane');
                 }, 1000);
+            } else {
+                // Update the hidden indicator if needed
+                const nameElement = listItem.querySelector('.plane-list-id');
+                const displayName = plane.username || 'Anonymous Pilot';
+                const hiddenIndicator = isHidden ? ' (hidden)' : '';
+                nameElement.textContent = `${displayName}${hiddenIndicator}`;
             }
             
             // Update the color based on altitude
@@ -2089,6 +2426,7 @@
             }
         }
         
+        
         // Update plane list times periodically
         function updatePlaneListTimes() {
             // Only update if the plane list is visible
@@ -2103,6 +2441,14 @@
                     if (listItem) {
                         const existenceTime = Math.floor((now - plane.creationTime) / 1000);
                         listItem.querySelector('.plane-list-time').textContent = `${existenceTime}s`;
+                        
+                        // Also update the hidden indicator if needed
+                        const altitude = plane.position.y - 35.2;
+                        const isHidden = altitude < LANDED_ALTITUDE_THRESHOLD && !showLanded;
+                        const nameElement = listItem.querySelector('.plane-list-id');
+                        const displayName = plane.username || 'Anonymous Pilot';
+                        const hiddenIndicator = isHidden ? ' (hidden)' : '';
+                        nameElement.textContent = `${displayName}${hiddenIndicator}`;
                     }
                 }
             });
