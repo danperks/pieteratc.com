@@ -801,7 +801,7 @@
         </div>
         
         <div id="plane-list-container">
-            <div class="plane-list-header">Active Planes (Oldest First)</div>
+            <div class="plane-list-header">Active Planes</div>
             <div id="plane-list"></div>
         </div>
         
@@ -1123,6 +1123,26 @@
                                 lastUpdateTime = Date.now();
                             }
                         }
+                        // Handle crash events
+                        else if (data.type === 'crash') {
+                            console.log('💥 Crash event received:', data);
+                            const crashedPlaneId = data.planeId;
+                            const plane = planes.get(crashedPlaneId);
+
+                            if (plane) {
+                                // Optional: Add a visual effect for the crash
+                                addCrashEffect(plane.position.x, plane.position.z);
+
+                                // Remove the plane
+                                removePlane(crashedPlaneId);
+
+                                // Show a notification
+                                const crashMessage = data.username ? `${data.username} ${data.verb || 'crashed'}` : `Plane ${crashedPlaneId} crashed`;
+                                showNotification(crashMessage);
+                            } else {
+                                console.log(`Crash event for unknown plane: ${crashedPlaneId}`);
+                            }
+                        }
                         
                         // Update last update time
                         const now = new Date();
@@ -1381,10 +1401,11 @@
             // Update plane rotation (heading)
             const headingRad = (plane.heading * Math.PI) / 180;
             // Adjust rotation to make the triangle point in the direction of travel
-            // The SVG triangle points up by default, so we need to rotate it 90 degrees
-            // to match the game's coordinate system where 0 degrees is north
-            // Since we flipped the x-axis, we need to adjust the rotation
-            const rotationDeg = (180 - plane.heading) % 360; // Simpler approach: mirror the angle around the vertical axis
+            // The SVG triangle points up by default, so we need to rotate it
+            // to match the game's coordinate system where 0 degrees is north (+Z).
+            // Since the screen coordinates flip both X and Z relative to game coordinates,
+            // the rotation needs to be negated.
+            const rotationDeg = (-plane.heading) % 360; // Corrected rotation
             
             // Get the SVG element and rotate it
             const svg = plane.element.querySelector('.plane-icon');
@@ -1620,125 +1641,78 @@
         // Update active planes count
         function updateActivePlanesCount() {
             const now = Date.now();
-            let activeCount = 0;
-            
-            planes.forEach(plane => {
+            // Remove activeCount variable, we'll just use planes.size
+            const planesToRemove = []; // Keep track of planes to remove
+
+            planes.forEach((plane, planeId) => {
                 const timeSinceUpdate = now - plane.lastUpdate;
-                
-                // Only count planes that have moved as active
-                if (plane.hasMoved) {
-                    // Check if the plane is hidden (below altitude threshold)
-                    const altitude = plane.position.y - 35.2;
-                    const isHidden = altitude < LANDED_ALTITUDE_THRESHOLD && !showLanded;
-                    
-                    // If the plane is hidden and hasn't been updated for 15 seconds, remove it
-                    if (isHidden && timeSinceUpdate > 15000) {
-                        // Remove plane element if it exists
-                        if (plane.element && plane.element.parentNode) {
-                            plane.element.parentNode.removeChild(plane.element);
-                        }
-                        
-                        // Remove trail elements
-                        plane.trails.forEach(trail => {
-                            if (trail.element.parentNode) {
-                                trail.element.parentNode.removeChild(trail.element);
-                            }
-                            if (trail.lineElement && trail.lineElement.parentNode) {
-                                trail.lineElement.parentNode.removeChild(trail.lineElement);
-                            }
-                        });
-                        
-                        // Remove from planes map
-                        planes.delete(plane.id);
-                        
-                        // Remove from plane list
-                        const listItem = document.getElementById(`plane-list-item-${plane.id}`);
-                        if (listItem) {
-                            listItem.remove();
-                        }
-                        
-                        // If this was the selected plane, clear selection
-                        if (selectedPlaneId === plane.id) {
-                            selectedPlaneId = null;
-                            updateSelectedPlaneInfo();
-                        }
-                        
-                        return; // Skip the rest of the processing for this plane
-                    }
-                    
-                    // Consider planes active if they've been updated recently
-                    if (timeSinceUpdate < PLANE_FADE_START) {
-                        activeCount++;
-                    } 
-                    // Remove planes that have completely faded out (fade start + duration)
-                    else if (timeSinceUpdate > PLANE_FADE_START + PLANE_FADE_DURATION) {
-                        // Remove plane element if it exists
-                        if (plane.element && plane.element.parentNode) {
-                            plane.element.parentNode.removeChild(plane.element);
-                        }
-                        
-                        // Remove trail elements
-                        plane.trails.forEach(trail => {
-                            if (trail.element.parentNode) {
-                                trail.element.parentNode.removeChild(trail.element);
-                            }
-                            if (trail.lineElement && trail.lineElement.parentNode) {
-                                trail.lineElement.parentNode.removeChild(trail.lineElement);
-                            }
-                        });
-                        
-                        // Remove from planes map
-                        planes.delete(plane.id);
-                        
-                        // Remove from plane list
-                        const listItem = document.getElementById(`plane-list-item-${plane.id}`);
-                        if (listItem) {
-                            listItem.remove();
-                        }
-                        
-                        // If this was the selected plane, clear selection
-                        if (selectedPlaneId === plane.id) {
-                            selectedPlaneId = null;
-                            updateSelectedPlaneInfo();
-                        }
-                    }
-                    // Partially faded planes are still counted as active
-                    else {
-                        activeCount++;
-                    }
-                } else {
-                    // For planes that haven't moved, only remove them if they're very old
-                    if (timeSinceUpdate > PLANE_FADE_START + PLANE_FADE_DURATION * 2) {
-                        // Remove plane element if it exists (shouldn't exist, but just in case)
-                        if (plane.element && plane.element.parentNode) {
-                            plane.element.parentNode.removeChild(plane.element);
-                        }
-                        
-                        // Remove trail elements
-                        plane.trails.forEach(trail => {
-                            if (trail.element.parentNode) {
-                                trail.element.parentNode.removeChild(trail.element);
-                            }
-                            if (trail.lineElement && trail.lineElement.parentNode) {
-                                trail.lineElement.parentNode.removeChild(trail.lineElement);
-                            }
-                        });
-                        
-                        // Remove from planes map
-                        planes.delete(plane.id);
-                        
-                        // If this was the selected plane, clear selection
-                        if (selectedPlaneId === plane.id) {
-                            selectedPlaneId = null;
-                            updateSelectedPlaneInfo();
-                        }
-                    }
+                const isVisible = plane.hasMoved && (showLanded || (plane.position.y - 35.2 >= LANDED_ALTITUDE_THRESHOLD));
+
+                // Check if plane should be removed (stale or hidden and old)
+                if (timeSinceUpdate > PLANE_FADE_START + PLANE_FADE_DURATION) {
+                    planesToRemove.push(planeId);
+                } else if (!isVisible && timeSinceUpdate > 15000) { // Remove hidden planes after 15s
+                    planesToRemove.push(planeId);
+                } else if (!plane.hasMoved && timeSinceUpdate > PLANE_FADE_START + PLANE_FADE_DURATION * 2) { // Remove unmoved planes after longer timeout
+                    planesToRemove.push(planeId);
+                }
+                // No need to count active planes separately anymore
+            });
+
+            // Remove planes marked for removal
+            planesToRemove.forEach(planeId => {
+                removePlane(planeId); // removePlane already updates the count via planes.size
+            });
+
+            // Directly update the count to the current size of the planes map
+            activePlanesCount.textContent = planes.size;
+        }
+
+        // Helper function to remove a plane completely
+        function removePlane(planeId) {
+            const plane = planes.get(planeId);
+            if (!plane) return;
+
+            // Remove plane element if it exists
+            if (plane.element && plane.element.parentNode) {
+                plane.element.parentNode.removeChild(plane.element);
+            }
+
+            // Remove trail elements
+            plane.trails.forEach(trail => {
+                if (trail.element && trail.element.parentNode) {
+                    trail.element.parentNode.removeChild(trail.element);
+                }
+                if (trail.lineElement && trail.lineElement.parentNode) {
+                    trail.lineElement.parentNode.removeChild(trail.lineElement);
                 }
             });
-            
-            activePlanesCount.textContent = activeCount;
+
+            // Remove from planes map
+            planes.delete(planeId);
+
+            // Remove from plane list UI
+            const listItem = document.getElementById(`plane-list-item-${planeId}`);
+            if (listItem) {
+                listItem.remove();
+            }
+
+            // If this was the selected plane, clear selection
+            if (selectedPlaneId === planeId) {
+                selectedPlaneId = null;
+                updateSelectedPlaneInfo();
+                // Show the radar center dot again
+                const radarCenterDot = document.querySelector('.radar-center');
+                if (radarCenterDot) {
+                    radarCenterDot.style.display = 'block';
+                }
+            }
+
+            // Update active count immediately after removal
+            activePlanesCount.textContent = planes.size;
+            console.log(`Removed plane ${planeId}`);
         }
-        
+
         // Update all planes positions
         function updateAllPlanePositions() {
             planes.forEach(plane => {
@@ -1848,58 +1822,6 @@
             }, 1000);
         });
         
-        // Select None button
-        // document.getElementById('select-none').addEventListener('click', () => {
-        //     // Deselect the currently selected plane if any
-        //     if (selectedPlaneId) {
-        //         // Deselect the currently selected plane
-        //         const plane = planes.get(selectedPlaneId);
-        //         if (plane && plane.element) {
-        //             plane.element.style.border = 'none';
-        //         }
-        //         
-        //         // Remove selected class from list item
-        //         const listItem = document.getElementById(`plane-list-item-${selectedPlaneId}`);
-        //         if (listItem) {
-        //             listItem.classList.remove('selected');
-        //         }
-        //         
-        //         // Clear selection
-        //         selectedPlaneId = null;
-        //         updateSelectedPlaneInfo();
-        //     }
-        //     
-        //     // Center the view on the map origin (0,0)
-        //     radarCenter = { x: 0, z: 0 };
-        //     
-        //     // Show the radar center dot
-        //     const radarCenterDot = document.querySelector('.radar-center');
-        //     if (radarCenterDot) {
-        //         radarCenterDot.style.display = 'block';
-        //     }
-        //     
-        //     // Update all plane positions to refresh trail visibility
-        //     updateAllPlanePositions();
-        //     
-        //     // Add visual feedback
-        //     const effect = document.createElement('div');
-        //     effect.className = 'centering-effect';
-        //     radar.appendChild(effect);
-        //     
-        //     // Position the effect at the center of the radar
-        //     const radarRect = radar.getBoundingClientRect();
-        //     const radarRadius = radarRect.width / 2;
-        //     effect.style.left = `${radarRadius}px`;
-        //     effect.style.top = `${radarRadius}px`;
-        //     
-        //     // Remove the effect after animation completes
-        //     setTimeout(() => {
-        //         if (effect.parentNode) {
-        //             effect.parentNode.removeChild(effect);
-        //         }
-        //     }, 1000);
-        // });
-        
         // Deselect plane button
         document.getElementById('deselect-plane').addEventListener('click', () => {
             if (selectedPlaneId) {
@@ -1930,23 +1852,6 @@
             }
         });
         
-        // Toggle trails button
-        // document.getElementById('toggle-trails').addEventListener('click', () => {
-        //     showTrails = !showTrails;
-        //     
-        //     // Show/hide existing trails based on showTrails and selectedPlaneId
-        //     planes.forEach(plane => {
-        //         const shouldShowTrails = showTrails && (!selectedPlaneId || selectedPlaneId === plane.id);
-        //         
-        //         plane.trails.forEach(trail => {
-        //             trail.element.style.display = shouldShowTrails ? 'block' : 'none';
-        //             if (trail.lineElement) {
-        //                 trail.lineElement.style.display = shouldShowTrails ? 'block' : 'none';
-        //             }
-        //         });
-        //     });
-        // });
-        
         // Toggle landed button
         document.getElementById('toggle-landed').addEventListener('click', () => {
             showLanded = !showLanded;
@@ -1959,20 +1864,6 @@
             lastPlaneListUpdate = 0;
             updatePlaneList();
         });
-        
-        // Toggle auto-center button
-        // document.getElementById('toggle-auto-center').addEventListener('click', () => {
-        //     autoCenter = !autoCenter;
-        //     document.getElementById('toggle-auto-center').textContent = autoCenter ? 'Auto-Center: ON' : 'Auto-Center: OFF';
-        //     
-        //     // If auto-center is enabled and a plane is selected, center on it immediately
-        //     if (autoCenter && selectedPlaneId) {
-        //         centerOnPlane(selectedPlaneId, false); // Don't show centering effect when toggling auto-center
-        //     }
-        // });
-        
-        // Set initial button text for toggle-auto-center
-        // document.getElementById('toggle-auto-center').textContent = autoCenter ? 'Auto-Center: ON' : 'Auto-Center: OFF';
         
         // Update radar circles when scale changes
         function updateRadarCircles() {
@@ -2258,9 +2149,6 @@
             // Set initial button text for toggle-landed
             document.getElementById('toggle-landed').textContent = showLanded ? 'Hide Landed' : 'Show Landed';
             
-            // Set initial button text for toggle-auto-center
-            document.getElementById('toggle-auto-center').textContent = autoCenter ? 'Auto-Center: ON' : 'Auto-Center: OFF';
-            
             // Check if screen is wide enough for plane list
             checkScreenWidth();
             
@@ -2393,9 +2281,14 @@
             } else {
                 // Update the hidden indicator if needed
                 const nameElement = listItem.querySelector('.plane-list-id');
-                const displayName = plane.username || 'Anonymous Pilot';
-                const hiddenIndicator = isHidden ? ' (hidden)' : '';
-                nameElement.textContent = `${displayName}${hiddenIndicator}`;
+                // Add null check here
+                if (nameElement) {
+                    const displayName = plane.username || 'Anonymous Pilot';
+                    const altitude = plane.position.y - 35.2; // Need altitude to determine hidden status
+                    const isHidden = altitude < LANDED_ALTITUDE_THRESHOLD && !showLanded;
+                    const hiddenIndicator = isHidden ? ' (hidden)' : '';
+                    nameElement.textContent = `${displayName}${hiddenIndicator}`;
+                }
             }
             
             // Update the color based on altitude
@@ -2431,31 +2324,83 @@
         function updatePlaneListTimes() {
             // Only update if the plane list is visible
             if (planeListContainer.style.display !== 'block') return;
-            
+
             const now = Date.now();
-            
+
             // Update the time for each plane in the list
             planes.forEach(plane => {
                 if (plane.hasMoved) {
                     const listItem = document.getElementById(`plane-list-item-${plane.id}`);
                     if (listItem) {
-                        const existenceTime = Math.floor((now - plane.creationTime) / 1000);
-                        listItem.querySelector('.plane-list-time').textContent = `${existenceTime}s`;
-                        
-                        // Also update the hidden indicator if needed
-                        const altitude = plane.position.y - 35.2;
-                        const isHidden = altitude < LANDED_ALTITUDE_THRESHOLD && !showLanded;
-                        const nameElement = listItem.querySelector('.plane-list-id');
-                        const displayName = plane.username || 'Anonymous Pilot';
-                        const hiddenIndicator = isHidden ? ' (hidden)' : '';
-                        nameElement.textContent = `${displayName}${hiddenIndicator}`;
+                        const timeElement = listItem.querySelector('.plane-list-time');
+                        const nameElement = listItem.querySelector('.plane-list-id'); // Query for name element here as well
+
+                        // Check if timeElement exists before setting textContent
+                        if (timeElement) {
+                            const existenceTime = Math.floor((now - plane.creationTime) / 1000);
+                            timeElement.textContent = `${existenceTime}s`; // Use the checked timeElement variable
+                        } else {
+                            // console.warn(`Could not find .plane-list-time for ${plane.id}`);
+                        }
+
+                        // Check if nameElement exists before setting textContent
+                        if (nameElement) {
+                            const altitude = plane.position.y - 35.2;
+                            const isHidden = altitude < LANDED_ALTITUDE_THRESHOLD && !showLanded;
+                            const displayName = plane.username || 'Anonymous Pilot';
+                            const hiddenIndicator = isHidden ? ' (hidden)' : '';
+                            nameElement.textContent = `${displayName}${hiddenIndicator}`; // Use the checked nameElement variable
+                        } else {
+                            // console.warn(`Could not find .plane-list-id for ${plane.id}`);
+                        }
                     }
                 }
             });
         }
-        
-        // Update plane list times every second
-        setInterval(updatePlaneListTimes, 1000);
+
+        // Add crash effect function
+        function addCrashEffect(x, z) {
+            const effect = document.createElement('div');
+            effect.className = 'centering-effect'; // Reuse centering effect style for now
+            effect.style.borderColor = '#ff0000'; // Red color for crash
+            radar.appendChild(effect);
+
+            // Position the effect at the crash location
+            const radarRect = radar.getBoundingClientRect();
+            const radarRadius = radarRect.width / 2;
+            const relX = (x - radarCenter.x) / scale;
+            const relZ = (z - radarCenter.z) / scale;
+            const screenX = radarRadius * (1 - relX);
+            const screenZ = radarRadius * (1 - relZ);
+            effect.style.left = `${screenX}px`;
+            effect.style.top = `${screenZ}px`;
+
+            // Remove the effect after animation completes
+            setTimeout(() => {
+                if (effect.parentNode) {
+                    effect.parentNode.removeChild(effect);
+                }
+            }, 1000);
+        }
+
+        // Add notification function
+        function showNotification(message) {
+            const notification = document.createElement('div');
+            notification.className = 'notification';
+            notification.textContent = message;
+            document.body.appendChild(notification);
+
+            // Remove the notification after a few seconds
+            setTimeout(() => {
+                notification.style.transition = 'opacity 0.5s';
+                notification.style.opacity = '0';
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 500);
+            }, 3000);
+        }
     </script>
 </body>
 </html>
